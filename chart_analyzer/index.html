@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gold Chart Analysis Agent</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0f14;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      color: #f5c518;
+      letter-spacing: 0.5px;
+    }
+
+    header p {
+      color: #888;
+      font-size: 0.9rem;
+      margin-top: 6px;
+    }
+
+    .card {
+      background: #161920;
+      border: 1px solid #2a2d35;
+      border-radius: 12px;
+      padding: 24px;
+      width: 100%;
+      max-width: 780px;
+      margin-bottom: 20px;
+    }
+
+    .card h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #888;
+      margin-bottom: 14px;
+    }
+
+    /* Drop zone */
+    #drop-zone {
+      border: 2px dashed #2e3340;
+      border-radius: 10px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    #drop-zone:hover,
+    #drop-zone.drag-over {
+      border-color: #f5c518;
+      background: #1a1d24;
+    }
+
+    #drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    #drop-zone .drop-icon {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+    }
+
+    #drop-zone p {
+      color: #888;
+      font-size: 0.9rem;
+    }
+
+    #drop-zone .drop-label {
+      color: #e0e0e0;
+      font-size: 1rem;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    /* Preview */
+    #preview-wrap {
+      display: none;
+      margin-top: 16px;
+      position: relative;
+    }
+
+    #preview-wrap img {
+      width: 100%;
+      max-height: 320px;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid #2a2d35;
+      background: #0d0f14;
+    }
+
+    #remove-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.7);
+      color: #f5c518;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+
+    /* Question input */
+    #question {
+      width: 100%;
+      background: #0d0f14;
+      border: 1px solid #2a2d35;
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 0.95rem;
+      padding: 12px 14px;
+      resize: vertical;
+      min-height: 72px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #question:focus {
+      border-color: #f5c518;
+    }
+
+    /* Analyze button */
+    #analyze-btn {
+      width: 100%;
+      max-width: 780px;
+      padding: 14px;
+      background: #f5c518;
+      color: #0d0f14;
+      font-weight: 700;
+      font-size: 1rem;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      transition: opacity 0.2s;
+      margin-bottom: 20px;
+    }
+
+    #analyze-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* Result */
+    #result-card {
+      display: none;
+    }
+
+    #result-body {
+      background: #0d0f14;
+      border: 1px solid #2a2d35;
+      border-radius: 8px;
+      padding: 18px;
+      font-size: 0.93rem;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      color: #d4d4d4;
+      max-height: 520px;
+      overflow-y: auto;
+    }
+
+    /* Markdown-style bold */
+    #result-body strong {
+      color: #f5c518;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    #reset-btn {
+      background: transparent;
+      border: 1px solid #2a2d35;
+      color: #888;
+      border-radius: 6px;
+      padding: 5px 12px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    #reset-btn:hover {
+      border-color: #f5c518;
+      color: #f5c518;
+    }
+
+    /* Loading spinner */
+    .spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2px solid #0d0f14;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #error-msg {
+      display: none;
+      color: #e05252;
+      font-size: 0.88rem;
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    footer {
+      color: #444;
+      font-size: 0.78rem;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Gold Chart Analysis Agent</h1>
+    <p>Upload a chart screenshot — get an instant technical analysis and trade recommendation</p>
+  </header>
+
+  <!-- Upload card -->
+  <div class="card">
+    <h2>Chart Screenshot</h2>
+    <div id="drop-zone">
+      <input type="file" id="file-input" accept="image/*" />
+      <div class="drop-icon">📈</div>
+      <div class="drop-label">Drop your chart here</div>
+      <p>or click to browse — PNG, JPG, WebP supported</p>
+    </div>
+    <div id="preview-wrap">
+      <img id="preview-img" src="" alt="Chart preview" />
+      <button id="remove-btn">✕ Remove</button>
+    </div>
+  </div>
+
+  <!-- Question card -->
+  <div class="card">
+    <h2>Your Question</h2>
+    <textarea id="question" placeholder="e.g. Should I enter a long position here? Where is the nearest support?">Analyze this chart and give me a trading recommendation.</textarea>
+  </div>
+
+  <button id="analyze-btn" disabled>Analyze Chart</button>
+
+  <p id="error-msg"></p>
+
+  <!-- Result card -->
+  <div class="card" id="result-card">
+    <div class="result-header">
+      <h2>Analysis</h2>
+      <button id="reset-btn">New Analysis</button>
+    </div>
+    <div id="result-body"></div>
+  </div>
+
+  <footer>Powered by Claude Vision · For educational and informational purposes only · Not financial advice</footer>
+
+  <script>
+    const dropZone   = document.getElementById("drop-zone");
+    const fileInput  = document.getElementById("file-input");
+    const previewWrap = document.getElementById("preview-wrap");
+    const previewImg = document.getElementById("preview-img");
+    const removeBtn  = document.getElementById("remove-btn");
+    const questionEl = document.getElementById("question");
+    const analyzeBtn = document.getElementById("analyze-btn");
+    const resultCard = document.getElementById("result-card");
+    const resultBody = document.getElementById("result-body");
+    const errorMsg   = document.getElementById("error-msg");
+    const resetBtn   = document.getElementById("reset-btn");
+
+    let selectedFile = null;
+
+    // Drag-and-drop visual feedback
+    dropZone.addEventListener("dragover", e => {
+      e.preventDefault();
+      dropZone.classList.add("drag-over");
+    });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("drag-over");
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
+
+    function handleFile(file) {
+      if (!file.type.startsWith("image/")) {
+        showError("Please upload an image file (PNG, JPG, WebP, etc.)");
+        return;
+      }
+      selectedFile = file;
+      const reader = new FileReader();
+      reader.onload = e => {
+        previewImg.src = e.target.result;
+        previewWrap.style.display = "block";
+        dropZone.querySelector("input").style.display = "none";
+        analyzeBtn.disabled = false;
+        hideError();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    removeBtn.addEventListener("click", resetUpload);
+
+    function resetUpload() {
+      selectedFile = null;
+      previewWrap.style.display = "none";
+      previewImg.src = "";
+      fileInput.value = "";
+      dropZone.querySelector("input").style.display = "";
+      analyzeBtn.disabled = true;
+    }
+
+    analyzeBtn.addEventListener("click", async () => {
+      if (!selectedFile) return;
+
+      analyzeBtn.disabled = true;
+      analyzeBtn.innerHTML = '<span class="spinner"></span>Analyzing…';
+      resultCard.style.display = "none";
+      hideError();
+
+      const formData = new FormData();
+      formData.append("chart", selectedFile, selectedFile.name);
+      formData.append("question", questionEl.value.trim() || "Analyze this chart and give me a trading recommendation.");
+
+      try {
+        const res = await fetch("/analyze", { method: "POST", body: formData });
+        const data = await res.json();
+
+        if (data.error) {
+          showError(data.error);
+        } else {
+          renderAnalysis(data.analysis);
+        }
+      } catch (err) {
+        showError("Could not reach the server. Is app.py running on port 5000?");
+      } finally {
+        analyzeBtn.disabled = false;
+        analyzeBtn.textContent = "Analyze Chart";
+      }
+    });
+
+    resetBtn.addEventListener("click", () => {
+      resultCard.style.display = "none";
+      resetUpload();
+      questionEl.value = "Analyze this chart and give me a trading recommendation.";
+    });
+
+    function renderAnalysis(text) {
+      // Convert **bold** markdown to <strong> tags
+      const html = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      resultBody.innerHTML = html;
+      resultCard.style.display = "block";
+      resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function showError(msg) {
+      errorMsg.textContent = "⚠ " + msg;
+      errorMsg.style.display = "block";
+    }
+
+    function hideError() {
+      errorMsg.style.display = "none";
+    }
+  </script>
+</body>
+</html>
