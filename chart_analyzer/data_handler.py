@@ -26,7 +26,7 @@ class DataHandler:
         df.columns = df.columns.str.lower()
 
         # Handle missing values
-        df = df.fillna(method='ffill').fillna(method='bfill')
+        df = df.ffill().bfill()
 
         # Remove duplicates
         df = df[~df.index.duplicated(keep='first')]

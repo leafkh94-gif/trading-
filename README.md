@@ -1,6 +1,6 @@
 # Trading Chart Analyzer
 
-A Python-based trading chart analysis tool for analyzing market data and generating trading signals.
+A Python-based chart analysis tool for evaluating market data and generating trading signals without relying on platform-specific wiring.
 
 ## Features
 
@@ -8,6 +8,7 @@ A Python-based trading chart analysis tool for analyzing market data and generat
 - Technical indicator calculations
 - Trading signal generation
 - Data visualization
+- Generic market analysis input handling
 
 ## Project Structure
 
