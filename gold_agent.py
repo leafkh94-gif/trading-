@@ -18,7 +18,9 @@ import os
 import anthropic
 from flask import Flask, request, jsonify
 
-API_KEY = os.environ.get("ANTHROPIC_API_KEY", "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")
+API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+if not API_KEY:
+    raise SystemExit("ERROR: ANTHROPIC_API_KEY environment variable is not set.")
 
 SYSTEM_PROMPT = """You are an expert technical analyst specializing in Gold (XAU/USD) trading.
 When shown a trading chart, provide a structured, actionable analysis in this exact format:
