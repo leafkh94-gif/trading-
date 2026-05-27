@@ -1,273 +1,506 @@
 """
-Gold Chart Analysis Agent
-=========================
-Single-file AI trading assistant powered by Claude vision.
+GoldScalperPro AI Agent v2
+Conversational | Live Price | MT4 Trade Monitor | TradingView Alerts
 
-Setup (one time only):
-    pip install anthropic flask
-
-Run:
-    Windows:  set ANTHROPIC_API_KEY=your_key_here && python gold_agent.py
-    Mac/Linux: ANTHROPIC_API_KEY=your_key_here python gold_agent.py
-
-Then open: http://localhost:5000
+Setup:  pip install anthropic flask yfinance
+Run:    set ANTHROPIC_API_KEY=your_key && python gold_agent.py
+Open:   http://localhost:5000
 """
 
-import base64
-import os
-import anthropic
+import base64, os, json, threading, time
+from datetime import datetime
 from flask import Flask, request, jsonify
+import anthropic
 
-API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-if not API_KEY:
-    raise SystemExit("ERROR: ANTHROPIC_API_KEY environment variable is not set.")
+try:
+    import yfinance as yf
+    HAS_YFINANCE = True
+except ImportError:
+    HAS_YFINANCE = False
 
-SYSTEM_PROMPT = """You are GoldScalperPro AI — an elite Gold (XAU/USD) technical analyst that thinks exactly like a professional scalping bot.
+API_KEY = os.environ.get("ANTHROPIC_API_KEY", "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")
 
-You apply the EXACT same strategy framework as the GoldScalperPro MT4 expert advisor:
+# ── Global state ──────────────────────────────────────────────────────────────
+conversation  = []          # Full chat history (Claude API format)
+open_trades   = []          # Updated by TradeMonitor.mq4 via POST /trades
+tv_alerts     = []          # Updated by TradingView webhook POST /webhook
+live_price    = {"price": None, "change": None, "pct": None, "updated": None}
+price_lock    = threading.Lock()
 
-═══════════════════════════════════════════════
-ANALYSIS FRAMEWORK (apply every step):
-═══════════════════════════════════════════════
+# ── System prompt ─────────────────────────────────────────────────────────────
+SYSTEM = """You are GoldScalperPro AI — a professional Gold (XAU/USD) trading assistant with real-time awareness.
 
-1. TREND HIERARCHY (3 EMAs)
-   - Look for EMA 8 (fast), EMA 21 (mid), EMA 50 (slow) if visible
-   - Bullish stack: EMA8 > EMA21 > EMA50
-   - Bearish stack: EMA8 < EMA21 < EMA50
-   - Otherwise: ranging / no trend
-   - If EMAs aren't drawn, infer trend from price structure (higher highs/lows vs lower highs/lows)
+You have access to:
+- Live XAUUSD price (injected into each message automatically)
+- User's open MT4 positions (injected when available)
+- TradingView alerts (injected when received)
+- Full conversation history (you remember everything we discussed)
 
-2. RSI MOMENTUM (RSI 14)
-   - Bullish confirmation: RSI > 55
-   - Bearish confirmation: RSI < 45
-   - Neutral zone (45-55): no momentum edge
-   - Overbought (>70) or oversold (<30): reversal risk
+You think using the GoldScalperPro strategy framework:
 
-3. MACD MOMENTUM
-   - Histogram rising above zero = bullish momentum
-   - Histogram falling below zero = bearish momentum
-   - Divergence with price = early reversal warning
+TREND    → EMA 8 / 21 / 50 stack (bullish: 8>21>50, bearish: 8<21<50)
+MOMENTUM → RSI 14 (bull >55, bear <45) + MACD histogram direction
+LEVELS   → 20-bar swing high/low as key S&R
+SIGNALS  → SCALP-BUY, SCALP-SELL, BREAK-BUY, BREAK-SELL, or WAIT
+SIZING   → 1% equity risk per trade, SL = 1.5×ATR, TP = 3×ATR (scalp) / 5×ATR (breakout)
 
-4. SUPPORT & RESISTANCE (last 20 bars)
-   - Identify the highest high and lowest low of the recent swing
-   - A close beyond these levels (+ buffer) signals breakout
+When analyzing a chart image give this structure:
+**📊 MARKET STRUCTURE** — trend + EMA read
+**📍 KEY LEVELS** — support / resistance prices
+**📈 INDICATORS** — RSI zone, MACD, volatility
+**🎯 SIGNAL** — one of the 5 signal types + reason
+**💰 TRADE PLAN** — entry / SL / TP1 / TP2 / lot sizing
+**⚠️ RISK NOTES** — invalidation level + confidence
 
-5. VOLATILITY (ATR concept)
-   - Estimate average candle range
-   - Stop loss zone = ~1.5x typical candle range
-   - Take profit zone (scalp) = ~3x typical range
-   - Take profit zone (breakout) = ~5x typical range
+When monitoring open trades:
+- Flag any trade whose stop is within 30 points of current price
+- Suggest trailing stop adjustments based on current price action
+- Validate whether the original entry thesis still holds
+- Recommend partial close or full exit if momentum has reversed
 
-═══════════════════════════════════════════════
-SIGNAL TYPES (match the bot exactly):
-═══════════════════════════════════════════════
+Be conversational. Remember context. Ask clarifying questions when needed.
+Give specific price levels, not vague ranges. Be direct — the user is actively trading."""
 
-SCALP-BUY  → All four must align: EMA8 crossing above EMA21, price above EMA50, RSI > 55, MACD bullish
-SCALP-SELL → Mirror of above
-BREAK-BUY  → Price closes above 20-bar swing high WITH RSI > 55
-BREAK-SELL → Price closes below 20-bar swing low WITH RSI < 45
-WAIT       → Any conflicting signals OR no clean setup
+# ── Live price background thread ──────────────────────────────────────────────
+def price_worker():
+    while True:
+        if HAS_YFINANCE:
+            try:
+                t = yf.Ticker("GC=F")
+                h = t.history(period="2d", interval="1m")
+                if not h.empty:
+                    p   = round(float(h["Close"].iloc[-1]), 2)
+                    p0  = round(float(h["Close"].iloc[-2]), 2)
+                    chg = round(p - p0, 2)
+                    pct = round((chg / p0) * 100, 3) if p0 else 0
+                    with price_lock:
+                        live_price.update(price=p, change=chg, pct=pct,
+                                          updated=datetime.now().strftime("%H:%M:%S"))
+            except Exception:
+                pass
+        time.sleep(30)
 
-═══════════════════════════════════════════════
-RESPONSE FORMAT (use this exact structure):
-═══════════════════════════════════════════════
-
-**📊 MARKET STRUCTURE**
-Trend direction + EMA stack assessment (bullish/bearish/sideways) + brief reasoning.
-
-**📍 KEY LEVELS**
-- Resistance: [price]
-- Support: [price]
-- Recent swing high/low: [price]
-
-**📈 INDICATOR READ**
-- EMA alignment: [bullish stack / bearish stack / mixed]
-- RSI: [estimated value, zone]
-- MACD: [bullish / bearish / neutral momentum]
-- Volatility: [low / medium / high]
-
-**🎯 SIGNAL**
-[SCALP-BUY / SCALP-SELL / BREAK-BUY / BREAK-SELL / WAIT]
-One-sentence reason.
-
-**💰 TRADE PLAN** (only if signal is not WAIT)
-- Entry: [price zone]
-- Stop Loss: [price] — risk in pips/points
-- Take Profit 1: [price] — 1:1 R/R
-- Take Profit 2: [price] — 1:2 R/R
-- Position size: Risk 1% of equity, calculate lots from SL distance
-
-**⚠️ RISK NOTES**
-- Invalidation: [price level that voids the setup]
-- Watch out for: [news, session timing, low liquidity, etc.]
-- Confidence: [Low / Medium / High] — based on how many indicators align
-
-Be direct, decisive, and base everything on what is actually visible. Do not hedge — give a clear signal.
-This is technical analysis for educational purposes; the user makes the final decision."""
-
-HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Gold Chart Analysis Agent</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:32px 16px}
-    header{text-align:center;margin-bottom:28px}
-    header h1{font-size:1.5rem;color:#f5c518;letter-spacing:.5px}
-    header p{color:#888;font-size:.88rem;margin-top:6px}
-    .card{background:#161920;border:1px solid #2a2d35;border-radius:12px;padding:22px;width:100%;max-width:760px;margin-bottom:18px}
-    .card h2{font-size:.8rem;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:12px}
-    #drop-zone{border:2px dashed #2e3340;border-radius:10px;padding:36px 20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative}
-    #drop-zone:hover,#drop-zone.drag-over{border-color:#f5c518;background:#1a1d24}
-    #drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-    #drop-zone .icon{font-size:2.2rem;margin-bottom:8px}
-    #drop-zone .label{color:#e0e0e0;font-size:.95rem;font-weight:500;margin-bottom:4px}
-    #drop-zone p{color:#888;font-size:.85rem}
-    #preview-wrap{display:none;margin-top:14px;position:relative}
-    #preview-wrap img{width:100%;max-height:300px;object-fit:contain;border-radius:8px;border:1px solid #2a2d35;background:#0d0f14}
-    #remove-btn{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.75);color:#f5c518;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.78rem}
-    #question{width:100%;background:#0d0f14;border:1px solid #2a2d35;border-radius:8px;color:#e0e0e0;font-size:.92rem;padding:11px 13px;resize:vertical;min-height:68px;font-family:inherit;outline:none;transition:border-color .2s}
-    #question:focus{border-color:#f5c518}
-    #analyze-btn{width:100%;max-width:760px;padding:13px;background:#f5c518;color:#0d0f14;font-weight:700;font-size:.95rem;border:none;border-radius:10px;cursor:pointer;margin-bottom:18px;transition:opacity .2s}
-    #analyze-btn:disabled{opacity:.4;cursor:not-allowed}
-    #result-card{display:none}
-    .result-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-    #result-body{background:#0d0f14;border:1px solid #2a2d35;border-radius:8px;padding:16px;font-size:.9rem;line-height:1.75;white-space:pre-wrap;color:#d4d4d4;max-height:500px;overflow-y:auto}
-    #result-body strong{color:#f5c518}
-    #reset-btn{background:transparent;border:1px solid #2a2d35;color:#888;border-radius:6px;padding:4px 11px;cursor:pointer;font-size:.78rem;transition:border-color .2s,color .2s}
-    #reset-btn:hover{border-color:#f5c518;color:#f5c518}
-    .spinner{display:inline-block;width:16px;height:16px;border:2px solid #0d0f14;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:7px}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    #error-msg{display:none;color:#e05252;font-size:.85rem;margin-top:8px;text-align:center}
-    footer{color:#444;font-size:.75rem;margin-top:14px;text-align:center}
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Gold Chart Analysis Agent</h1>
-    <p>Upload a chart screenshot — get an instant AI analysis and trade recommendation</p>
-  </header>
-
-  <div class="card">
-    <h2>Chart Screenshot</h2>
-    <div id="drop-zone">
-      <input type="file" id="file-input" accept="image/*"/>
-      <div class="icon">📈</div>
-      <div class="label">Drop your chart here</div>
-      <p>or click to browse — PNG, JPG, WebP supported</p>
-    </div>
-    <div id="preview-wrap">
-      <img id="preview-img" src="" alt="preview"/>
-      <button id="remove-btn">✕ Remove</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Your Question</h2>
-    <textarea id="question">Apply the GoldScalperPro framework to this chart. Tell me the signal and exact entry/SL/TP levels.</textarea>
-  </div>
-
-  <button id="analyze-btn" disabled>Analyze Chart</button>
-  <p id="error-msg"></p>
-
-  <div class="card" id="result-card">
-    <div class="result-header">
-      <h2>Analysis</h2>
-      <button id="reset-btn">New Analysis</button>
-    </div>
-    <div id="result-body"></div>
-  </div>
-
-  <footer>Powered by Claude Vision &nbsp;·&nbsp; For educational purposes only &nbsp;·&nbsp; Not financial advice</footer>
-
-  <script>
-    const dropZone=document.getElementById('drop-zone'),fileInput=document.getElementById('file-input'),
-    previewWrap=document.getElementById('preview-wrap'),previewImg=document.getElementById('preview-img'),
-    removeBtn=document.getElementById('remove-btn'),questionEl=document.getElementById('question'),
-    analyzeBtn=document.getElementById('analyze-btn'),resultCard=document.getElementById('result-card'),
-    resultBody=document.getElementById('result-body'),errorMsg=document.getElementById('error-msg'),
-    resetBtn=document.getElementById('reset-btn');
-    let selectedFile=null;
-
-    dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('drag-over')});
-    dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('drag-over'));
-    dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('drag-over');if(e.dataTransfer.files.length)handleFile(e.dataTransfer.files[0])});
-    fileInput.addEventListener('change',()=>{if(fileInput.files.length)handleFile(fileInput.files[0])});
-
-    function handleFile(file){
-      if(!file.type.startsWith('image/')){showError('Please upload an image file.');return}
-      selectedFile=file;
-      const r=new FileReader();
-      r.onload=e=>{previewImg.src=e.target.result;previewWrap.style.display='block';fileInput.style.display='none';analyzeBtn.disabled=false;hideError()};
-      r.readAsDataURL(file);
-    }
-
-    removeBtn.addEventListener('click',reset);
-    function reset(){selectedFile=null;previewWrap.style.display='none';previewImg.src='';fileInput.value='';fileInput.style.display='';analyzeBtn.disabled=true}
-
-    analyzeBtn.addEventListener('click',async()=>{
-      if(!selectedFile)return;
-      analyzeBtn.disabled=true;analyzeBtn.innerHTML='<span class="spinner"></span>Analyzing…';
-      resultCard.style.display='none';hideError();
-      const fd=new FormData();
-      fd.append('chart',selectedFile,selectedFile.name);
-      fd.append('question',questionEl.value.trim()||'Apply the GoldScalperPro framework to this chart. Tell me the signal and exact entry/SL/TP levels.');
-      try{
-        const res=await fetch('/analyze',{method:'POST',body:fd});
-        const data=await res.json();
-        if(data.error){showError(data.error)}
-        else{resultBody.innerHTML=data.analysis.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');resultCard.style.display='block';resultCard.scrollIntoView({behavior:'smooth',block:'start'})}
-      }catch(e){showError('Could not connect. Make sure gold_agent.py is running.')}
-      finally{analyzeBtn.disabled=false;analyzeBtn.textContent='Analyze Chart'}
-    });
-
-    resetBtn.addEventListener('click',()=>{resultCard.style.display='none';reset();questionEl.value='Apply the GoldScalperPro framework to this chart. Tell me the signal and exact entry/SL/TP levels.'});
-    function showError(m){errorMsg.textContent='⚠ '+m;errorMsg.style.display='block'}
-    function hideError(){errorMsg.style.display='none'}
-  </script>
-</body>
-</html>"""
-
-
+# ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 
 @app.route("/")
 def index():
     return HTML
 
-@app.route("/analyze", methods=["POST"])
-def analyze():
-    if "chart" not in request.files:
-        return jsonify({"error": "No image uploaded"}), 400
+@app.route("/price")
+def get_price():
+    with price_lock:
+        return jsonify(live_price)
 
-    f = request.files["chart"]
-    question = request.form.get("question", "Apply the GoldScalperPro framework to this chart. Tell me the signal and exact entry/SL/TP levels.")
+@app.route("/trades", methods=["GET","POST"])
+def trades_endpoint():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        with price_lock:
+            open_trades.clear()
+            open_trades.extend(data.get("trades", []))
+        return jsonify({"status": "ok"})
+    return jsonify({"trades": open_trades})
 
-    img_b64 = base64.standard_b64encode(f.read()).decode()
-    fname = f.filename.lower()
-    media = "image/png" if fname.endswith(".png") else \
-            "image/jpeg" if fname.endswith((".jpg", ".jpeg")) else \
-            "image/webp" if fname.endswith(".webp") else "image/png"
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.get_json(silent=True) or {}
+    msg  = data.get("message") or data.get("text") or json.dumps(data)
+    ts   = datetime.now().strftime("%H:%M:%S")
+    tv_alerts.append({"time": ts, "message": msg})
+    # Auto-inject alert into conversation
+    conversation.append({"role":"user",
+                         "content": f"[TradingView Alert {ts}]: {msg}"})
+    return jsonify({"status": "ok"})
+
+@app.route("/alerts")
+def get_alerts():
+    return jsonify({"alerts": tv_alerts[-20:]})
+
+@app.route("/clear", methods=["POST"])
+def clear():
+    conversation.clear()
+    return jsonify({"status": "cleared"})
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    text  = request.form.get("message", "").strip()
+    chart = request.files.get("chart")
+
+    # Build context prefix (price + trades)
+    ctx = []
+    with price_lock:
+        if live_price["price"]:
+            ctx.append(f"Live XAUUSD: ${live_price['price']} ({live_price['change']:+.2f} / {live_price['pct']:+.3f}%)")
+    if open_trades:
+        ctx.append("Open MT4 positions:\n" + json.dumps(open_trades, indent=2))
+
+    full_text = ("\n".join(ctx) + "\n\n" + text).strip() if ctx else text
+
+    # Build message content
+    content = []
+    if chart:
+        raw   = chart.read()
+        b64   = base64.standard_b64encode(raw).decode()
+        fname = chart.filename.lower()
+        mime  = ("image/png"  if fname.endswith(".png")  else
+                 "image/jpeg" if fname.endswith((".jpg",".jpeg")) else
+                 "image/webp" if fname.endswith(".webp")  else "image/png")
+        content.append({"type":"image","source":{"type":"base64","media_type":mime,"data":b64}})
+
+    content.append({"type":"text","text": full_text or "Analyze this chart with the GoldScalperPro framework."})
+    conversation.append({"role":"user","content":content})
+
+    # Keep history lean: strip image bytes from all but last image message
+    api_messages = _clean_history(conversation)
 
     try:
         client = anthropic.Anthropic(api_key=API_KEY)
-        resp = client.messages.create(
+        resp   = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2048,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": media, "data": img_b64}},
-                {"type": "text", "text": question}
-            ]}]
+            system=SYSTEM,
+            messages=api_messages
         )
-        return jsonify({"analysis": resp.content[0].text})
+        reply = resp.content[0].text
+        conversation.append({"role":"assistant","content":reply})
+        return jsonify({"reply": reply})
     except Exception as e:
+        conversation.pop()
         return jsonify({"error": str(e)}), 500
 
+def _clean_history(hist):
+    """Keep last 30 messages. Strip image bytes from all but the last image turn."""
+    trimmed = hist[-30:]
+    last_img_idx = None
+    for i, m in enumerate(trimmed):
+        if isinstance(m["content"], list):
+            for c in m["content"]:
+                if c.get("type") == "image":
+                    last_img_idx = i
+    result = []
+    for i, m in enumerate(trimmed):
+        if isinstance(m["content"], list) and i != last_img_idx:
+            # Replace image blocks with a placeholder text
+            new_content = []
+            for c in m["content"]:
+                if c.get("type") == "image":
+                    new_content.append({"type":"text","text":"[chart image from earlier in conversation]"})
+                else:
+                    new_content.append(c)
+            result.append({"role":m["role"],"content":new_content})
+        else:
+            result.append(m)
+    return result
+
+# ── Embedded HTML (single-file) ───────────────────────────────────────────────
+HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>GoldScalperPro AI</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── Header ── */
+#header{background:#111318;border-bottom:1px solid #1f2230;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#header h1{font-size:1rem;color:#f5c518;font-weight:700;letter-spacing:.5px}
+#ticker{font-size:.95rem;font-weight:600}
+#ticker.up{color:#26a69a}#ticker.down{color:#ef5350}#ticker.flat{color:#888}
+#header-right{display:flex;align-items:center;gap:12px}
+#clear-btn{background:transparent;border:1px solid #2a2d35;color:#888;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.75rem;transition:border-color .2s,color .2s}
+#clear-btn:hover{border-color:#f5c518;color:#f5c518}
+
+/* ── Layout ── */
+#body{display:flex;flex:1;overflow:hidden}
+
+/* ── Chat panel ── */
+#chat-panel{flex:1;display:flex;flex-direction:column;min-width:0}
+#messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+#messages::-webkit-scrollbar{width:4px}
+#messages::-webkit-scrollbar-thumb{background:#2a2d35;border-radius:4px}
+
+.msg{max-width:82%;padding:10px 13px;border-radius:10px;font-size:.88rem;line-height:1.65;word-break:break-word}
+.msg.user{background:#1e2235;align-self:flex-end;border-bottom-right-radius:3px;color:#c8cfe0}
+.msg.bot{background:#161920;align-self:flex-start;border-bottom-left-radius:3px;border:1px solid #1f2230}
+.msg.bot strong{color:#f5c518}
+.msg img{max-width:200px;border-radius:6px;margin-top:6px;display:block}
+.msg.typing{color:#555;font-style:italic}
+
+/* ── Input bar ── */
+#input-bar{border-top:1px solid #1f2230;padding:10px 12px;display:flex;align-items:flex-end;gap:8px;flex-shrink:0;background:#111318}
+#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#888;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:1rem;flex-shrink:0;transition:border-color .2s}
+#attach-btn:hover{border-color:#f5c518}
+#attach-btn.has-file{border-color:#f5c518;color:#f5c518}
+#file-input{display:none}
+#msg-input{flex:1;background:#0d0f14;border:1px solid #2a2d35;border-radius:8px;color:#e0e0e0;font-size:.88rem;padding:9px 12px;resize:none;height:40px;max-height:120px;font-family:inherit;outline:none;transition:border-color .2s;line-height:1.4}
+#msg-input:focus{border-color:#f5c518}
+#send-btn{background:#f5c518;color:#0d0f14;border:none;border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:700;font-size:.9rem;flex-shrink:0;transition:opacity .2s}
+#send-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Sidebar ── */
+#sidebar{width:260px;border-left:1px solid #1f2230;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.panel{border-bottom:1px solid #1f2230;display:flex;flex-direction:column}
+.panel-header{padding:10px 12px;font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:#888;font-weight:600;background:#111318;flex-shrink:0}
+.panel-body{padding:10px 12px;font-size:.8rem;overflow-y:auto;max-height:200px;flex:1}
+.panel-body::-webkit-scrollbar{width:3px}
+.panel-body::-webkit-scrollbar-thumb{background:#2a2d35}
+
+.trade-card{background:#0d0f14;border:1px solid #1f2230;border-radius:6px;padding:8px;margin-bottom:7px}
+.trade-card .symbol{font-weight:700;font-size:.82rem;color:#e0e0e0}
+.trade-card .dir{display:inline-block;padding:1px 6px;border-radius:3px;font-size:.7rem;font-weight:700;margin-left:5px}
+.dir.buy{background:#0d2b2b;color:#26a69a}
+.dir.sell{background:#2b0d0d;color:#ef5350}
+.trade-card .detail{color:#888;font-size:.75rem;margin-top:3px}
+.trade-card .pnl{font-weight:600;font-size:.82rem;margin-top:2px}
+.pnl.pos{color:#26a69a}.pnl.neg{color:#ef5350}
+.no-data{color:#444;font-style:italic;font-size:.78rem}
+
+.alert-item{border-left:2px solid #f5c518;padding:4px 8px;margin-bottom:6px;font-size:.76rem;color:#bbb}
+.alert-item .alert-time{color:#888;font-size:.7rem}
+
+#tv-setup{padding:10px 12px;font-size:.75rem;color:#555;line-height:1.5;flex:1}
+#tv-setup a{color:#f5c518}
+
+@media(max-width:640px){#sidebar{display:none}}
+
+/* Welcome message */
+.welcome{text-align:center;color:#444;font-size:.85rem;padding:40px 20px;line-height:1.8}
+.welcome span{font-size:2rem;display:block;margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>🏆 GoldScalperPro AI</h1>
+  <div id="header-right">
+    <span id="ticker" class="flat">XAUUSD —</span>
+    <button id="clear-btn" onclick="clearChat()">Clear chat</button>
+  </div>
+</div>
+
+<div id="body">
+
+  <!-- Chat -->
+  <div id="chat-panel">
+    <div id="messages">
+      <div class="welcome">
+        <span>📈</span>
+        Ask me anything about Gold trading.<br>
+        Attach a chart screenshot for a full GoldScalperPro analysis.<br>
+        I can see your live price and open MT4 trades in real time.
+      </div>
+    </div>
+
+    <div id="input-bar">
+      <button id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach chart">📎</button>
+      <input type="file" id="file-input" accept="image/*" onchange="onFileSelected(this)"/>
+      <textarea id="msg-input" placeholder="Ask about Gold, attach a chart, or say 'check my trades'…" onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
+      <button id="send-btn" onclick="sendMessage()">▶</button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+
+    <div class="panel" style="flex:0 0 auto">
+      <div class="panel-header">📊 Open MT4 Trades</div>
+      <div class="panel-body" id="trades-panel">
+        <div class="no-data">No trades received yet.<br>Run TradeMonitor.mq4 in MT4.</div>
+      </div>
+    </div>
+
+    <div class="panel" style="flex:1">
+      <div class="panel-header">⚡ TradingView Alerts</div>
+      <div class="panel-body" id="alerts-panel">
+        <div class="no-data" id="no-alerts">No alerts yet.</div>
+      </div>
+    </div>
+
+    <div id="tv-setup">
+      <b style="color:#888">Set up TV alerts:</b><br>
+      In TradingView → Alert → Notifications → Webhook URL:<br>
+      <code style="color:#f5c518">http://YOUR-IP:5000/webhook</code>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let selectedFile = null;
+
+// ── File attach ──────────────────────────────────────────────────
+function onFileSelected(input){
+  selectedFile = input.files[0] || null;
+  const btn = document.getElementById('attach-btn');
+  btn.classList.toggle('has-file', !!selectedFile);
+  btn.title = selectedFile ? selectedFile.name : 'Attach chart';
+}
+
+// ── Auto-resize textarea ─────────────────────────────────────────
+function autoResize(el){
+  el.style.height='40px';
+  el.style.height = Math.min(el.scrollHeight, 120)+'px';
+}
+
+// ── Send on Enter (Shift+Enter = newline) ────────────────────────
+function onKey(e){
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+}
+
+// ── Send message ─────────────────────────────────────────────────
+async function sendMessage(){
+  const input = document.getElementById('msg-input');
+  const text  = input.value.trim();
+  if(!text && !selectedFile) return;
+
+  const sendBtn = document.getElementById('send-btn');
+  sendBtn.disabled = true;
+
+  // Show user message
+  const msgs = document.getElementById('messages');
+  // Remove welcome if present
+  const welcome = msgs.querySelector('.welcome');
+  if(welcome) welcome.remove();
+
+  const userDiv = document.createElement('div');
+  userDiv.className = 'msg user';
+  if(selectedFile){
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(selectedFile);
+    userDiv.appendChild(img);
+  }
+  if(text) userDiv.appendChild(document.createTextNode(text));
+  msgs.appendChild(userDiv);
+
+  // Show typing indicator
+  const typing = document.createElement('div');
+  typing.className = 'msg bot typing';
+  typing.textContent = 'Analyzing…';
+  msgs.appendChild(typing);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  input.value = '';
+  input.style.height = '40px';
+
+  // Build form data
+  const fd = new FormData();
+  if(text) fd.append('message', text);
+  if(selectedFile) fd.append('chart', selectedFile, selectedFile.name);
+
+  // Reset file
+  selectedFile = null;
+  document.getElementById('file-input').value = '';
+  document.getElementById('attach-btn').classList.remove('has-file');
+  document.getElementById('attach-btn').title = 'Attach chart';
+
+  try{
+    const res  = await fetch('/chat', {method:'POST', body:fd});
+    const data = await res.json();
+    typing.remove();
+
+    const botDiv = document.createElement('div');
+    botDiv.className = 'msg bot';
+    botDiv.innerHTML = formatMsg(data.reply || ('Error: ' + data.error));
+    msgs.appendChild(botDiv);
+  } catch(e){
+    typing.remove();
+    const errDiv = document.createElement('div');
+    errDiv.className = 'msg bot';
+    errDiv.textContent = 'Connection error. Is the server running?';
+    msgs.appendChild(errDiv);
+  }
+
+  msgs.scrollTop = msgs.scrollHeight;
+  sendBtn.disabled = false;
+  input.focus();
+}
+
+// ── Format bot message (markdown bold + line breaks) ─────────────
+function formatMsg(text){
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\n/g,'<br>');
+}
+
+// ── Clear conversation ────────────────────────────────────────────
+async function clearChat(){
+  await fetch('/clear',{method:'POST'});
+  const msgs = document.getElementById('messages');
+  msgs.innerHTML = '<div class="welcome"><span>📈</span>Chat cleared. Ready for a new session.</div>';
+}
+
+// ── Live price ────────────────────────────────────────────────────
+async function updatePrice(){
+  try{
+    const d = await (await fetch('/price')).json();
+    const el = document.getElementById('ticker');
+    if(d.price){
+      const sign = d.change >= 0 ? '+' : '';
+      el.textContent = `XAUUSD $${d.price}  ${sign}${d.change} (${sign}${d.pct}%)`;
+      el.className = d.change > 0 ? 'up' : d.change < 0 ? 'down' : 'flat';
+    }
+  } catch(e){}
+}
+
+// ── Open trades ───────────────────────────────────────────────────
+async function updateTrades(){
+  try{
+    const d = await (await fetch('/trades')).json();
+    const panel = document.getElementById('trades-panel');
+    if(!d.trades || !d.trades.length){
+      panel.innerHTML = '<div class="no-data">No open trades.<br>Run TradeMonitor.mq4 in MT4.</div>';
+      return;
+    }
+    panel.innerHTML = d.trades.map(t => {
+      const pnlClass = t.pnl >= 0 ? 'pos' : 'neg';
+      const sign     = t.pnl >= 0 ? '+' : '';
+      const dirClass = t.direction === 'BUY' ? 'buy' : 'sell';
+      return `<div class="trade-card">
+        <div><span class="symbol">${t.symbol}</span>
+             <span class="dir ${dirClass}">${t.direction}</span></div>
+        <div class="detail">Lots: ${t.lots} | Open: ${t.open}</div>
+        <div class="detail">SL: ${t.sl||'—'} | TP: ${t.tp||'—'}</div>
+        <div class="pnl ${pnlClass}">${sign}$${t.pnl.toFixed(2)} (${t.pips.toFixed(1)} pts)</div>
+      </div>`;
+    }).join('');
+  } catch(e){}
+}
+
+// ── TradingView alerts ────────────────────────────────────────────
+async function updateAlerts(){
+  try{
+    const d = await (await fetch('/alerts')).json();
+    const panel = document.getElementById('alerts-panel');
+    if(!d.alerts || !d.alerts.length) return;
+    document.getElementById('no-alerts')?.remove();
+    panel.innerHTML = d.alerts.slice().reverse().map(a =>
+      `<div class="alert-item"><div class="alert-time">${a.time}</div>${escHtml(a.message)}</div>`
+    ).join('');
+  } catch(e){}
+}
+
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+// ── Polling ───────────────────────────────────────────────────────
+updatePrice();  setInterval(updatePrice,  30000);
+updateTrades(); setInterval(updateTrades, 10000);
+updateAlerts(); setInterval(updateAlerts, 15000);
+</script>
+</body>
+</html>"""
 
 if __name__ == "__main__":
-    print("\n Gold Chart Analysis Agent")
-    print(" Open your browser at: http://localhost:5000\n")
+    if HAS_YFINANCE:
+        threading.Thread(target=price_worker, daemon=True).start()
+        print(" Live price feed active (XAUUSD via yfinance)")
+    else:
+        print(" TIP: Run 'pip install yfinance' to enable live price feed")
+
+    print("\n GoldScalperPro AI Agent v2")
+    print(" Chat  : http://localhost:5000")
+    print(" Trades: POST http://localhost:5000/trades  (from TradeMonitor.mq4)")
+    print(" Alerts: POST http://localhost:5000/webhook (from TradingView)\n")
     app.run(host="0.0.0.0", port=5000, debug=False)
