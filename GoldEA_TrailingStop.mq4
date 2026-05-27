@@ -8,6 +8,7 @@
 #property link      ""
 #property version   "1.00"
 #property strict
+#include <stdlib.mqh>
 
 //+------------------------------------------------------------------+
 //| INPUT PARAMETERS                                                 |

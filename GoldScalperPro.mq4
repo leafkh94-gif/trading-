@@ -35,6 +35,7 @@
 #property link      ""
 #property version   "2.00"
 #property strict
+#include <stdlib.mqh>
 
 //+------------------------------------------------------------------+
 //| INPUT PARAMETERS                                                  |
