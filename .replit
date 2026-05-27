@@ -1,0 +1,10 @@
+run = "pip install anthropic flask yfinance requests -q && python gold_agent.py"
+entrypoint = "gold_agent.py"
+modules = ["python-3.11:v25-20240222-afe7073"]
+
+[nix]
+channel = "stable-23_11"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
