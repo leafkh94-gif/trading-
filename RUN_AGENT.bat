@@ -15,7 +15,7 @@ set ANTHROPIC_API_KEY=sk-ant-api03-MIvdPPRJF0avEs-eCvbosHkkpQyUGW7JluuF-ojHdJD9s
 
 REM Install dependencies (silent if already installed)
 echo  Checking dependencies...
-pip install --quiet anthropic flask >nul 2>&1
+pip install --quiet anthropic flask yfinance >nul 2>&1
 
 REM Open the browser to the local URL
 echo  Opening browser...
