@@ -38,16 +38,24 @@ pip install --quiet --upgrade anthropic flask yfinance requests
 echo  Done.
 echo.
 
-REM ── Open browser and start ──────────────────────
+REM ── Start agent, then open browser after it's ready ───
+echo  Starting agent...
+start /b "" python gold_agent.py
+
+echo  Waiting for server to start...
+timeout /t 5 /nobreak >nul
+
 echo  Opening browser...
 start "" "http://localhost:5000"
 
+echo.
 echo  Agent is running at: http://localhost:5000
-echo  Login password     : %ACCESS_PASSWORD%
 echo.
 echo  DO NOT close this window while using the agent.
 echo  To stop: close this window.
 echo.
-python gold_agent.py
 
-pause
+REM Keep window open
+:loop
+timeout /t 60 /nobreak >nul
+goto loop
