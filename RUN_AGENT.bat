@@ -1,30 +1,29 @@
 @echo off
 REM ====================================================
-REM  Gold Chart Analysis Agent - One-Click Launcher
-REM  Just double-click this file to run the agent.
+REM  GoldScalperPro AI Agent v3 - One-Click Launcher
 REM ====================================================
 
 echo.
 echo  ===============================================
-echo    Gold Chart Analysis Agent - Starting...
+echo    GoldScalperPro AI Agent - Starting...
 echo  ===============================================
 echo.
 
-REM Set the API key
+REM --- SETTINGS (edit these) ---
 set ANTHROPIC_API_KEY=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
+set ACCESS_PASSWORD=gold2024
 
-REM Install dependencies (silent if already installed)
+REM Install dependencies
 echo  Checking dependencies...
 pip install --quiet anthropic flask yfinance >nul 2>&1
 
-REM Open the browser to the local URL
-echo  Opening browser...
+REM Open browser
 start "" "http://localhost:5000"
 
-REM Run the agent
 echo.
-echo  Agent is running at: http://localhost:5000
-echo  Close this window to stop the agent.
+echo  Agent running at: http://localhost:5000
+echo  Login password  : %ACCESS_PASSWORD%
+echo  Close this window to stop.
 echo.
 python gold_agent.py
 
