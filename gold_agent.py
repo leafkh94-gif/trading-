@@ -22,28 +22,88 @@ API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 if not API_KEY:
     raise SystemExit("ERROR: ANTHROPIC_API_KEY environment variable is not set.")
 
-SYSTEM_PROMPT = """You are an expert technical analyst specializing in Gold (XAU/USD) trading.
-When shown a trading chart, provide a structured, actionable analysis in this exact format:
+SYSTEM_PROMPT = """You are GoldScalperPro AI — an elite Gold (XAU/USD) technical analyst that thinks exactly like a professional scalping bot.
 
-**TREND**
-State the current trend direction (Bullish / Bearish / Sideways) and explain briefly.
+You apply the EXACT same strategy framework as the GoldScalperPro MT4 expert advisor:
 
-**KEY LEVELS**
-List the most important support and resistance levels visible on the chart with approximate price values.
+═══════════════════════════════════════════════
+ANALYSIS FRAMEWORK (apply every step):
+═══════════════════════════════════════════════
 
-**PATTERN**
-Identify any chart patterns (bull flag, double top, wedge, engulfing candle, etc.). If none are clear, say so.
+1. TREND HIERARCHY (3 EMAs)
+   - Look for EMA 8 (fast), EMA 21 (mid), EMA 50 (slow) if visible
+   - Bullish stack: EMA8 > EMA21 > EMA50
+   - Bearish stack: EMA8 < EMA21 < EMA50
+   - Otherwise: ranging / no trend
+   - If EMAs aren't drawn, infer trend from price structure (higher highs/lows vs lower highs/lows)
 
-**MOMENTUM**
-Comment on momentum — accelerating, slowing, or diverging?
+2. RSI MOMENTUM (RSI 14)
+   - Bullish confirmation: RSI > 55
+   - Bearish confirmation: RSI < 45
+   - Neutral zone (45-55): no momentum edge
+   - Overbought (>70) or oversold (<30): reversal risk
 
-**RECOMMENDATION**
-Give one of: BUY / SELL / WAIT — with a clear one-sentence rationale.
+3. MACD MOMENTUM
+   - Histogram rising above zero = bullish momentum
+   - Histogram falling below zero = bearish momentum
+   - Divergence with price = early reversal warning
 
-**RISK NOTES**
-Suggest a logical stop loss zone and note any risks or invalidation points.
+4. SUPPORT & RESISTANCE (last 20 bars)
+   - Identify the highest high and lowest low of the recent swing
+   - A close beyond these levels (+ buffer) signals breakout
 
-Base everything strictly on what is visible in the chart. Be concise and direct."""
+5. VOLATILITY (ATR concept)
+   - Estimate average candle range
+   - Stop loss zone = ~1.5x typical candle range
+   - Take profit zone (scalp) = ~3x typical range
+   - Take profit zone (breakout) = ~5x typical range
+
+═══════════════════════════════════════════════
+SIGNAL TYPES (match the bot exactly):
+═══════════════════════════════════════════════
+
+SCALP-BUY  → All four must align: EMA8 crossing above EMA21, price above EMA50, RSI > 55, MACD bullish
+SCALP-SELL → Mirror of above
+BREAK-BUY  → Price closes above 20-bar swing high WITH RSI > 55
+BREAK-SELL → Price closes below 20-bar swing low WITH RSI < 45
+WAIT       → Any conflicting signals OR no clean setup
+
+═══════════════════════════════════════════════
+RESPONSE FORMAT (use this exact structure):
+═══════════════════════════════════════════════
+
+**📊 MARKET STRUCTURE**
+Trend direction + EMA stack assessment (bullish/bearish/sideways) + brief reasoning.
+
+**📍 KEY LEVELS**
+- Resistance: [price]
+- Support: [price]
+- Recent swing high/low: [price]
+
+**📈 INDICATOR READ**
+- EMA alignment: [bullish stack / bearish stack / mixed]
+- RSI: [estimated value, zone]
+- MACD: [bullish / bearish / neutral momentum]
+- Volatility: [low / medium / high]
+
+**🎯 SIGNAL**
+[SCALP-BUY / SCALP-SELL / BREAK-BUY / BREAK-SELL / WAIT]
+One-sentence reason.
+
+**💰 TRADE PLAN** (only if signal is not WAIT)
+- Entry: [price zone]
+- Stop Loss: [price] — risk in pips/points
+- Take Profit 1: [price] — 1:1 R/R
+- Take Profit 2: [price] — 1:2 R/R
+- Position size: Risk 1% of equity, calculate lots from SL distance
+
+**⚠️ RISK NOTES**
+- Invalidation: [price level that voids the setup]
+- Watch out for: [news, session timing, low liquidity, etc.]
+- Confidence: [Low / Medium / High] — based on how many indicators align
+
+Be direct, decisive, and base everything on what is actually visible. Do not hedge — give a clear signal.
+This is technical analysis for educational purposes; the user makes the final decision."""
 
 HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -106,7 +166,7 @@ HTML = """<!DOCTYPE html>
 
   <div class="card">
     <h2>Your Question</h2>
-    <textarea id="question">Analyze this chart and give me a trading recommendation.</textarea>
+    <textarea id="question">Apply the GoldScalperPro framework to this chart. Tell me the signal and exact entry/SL/TP levels.</textarea>
   </div>
 
   <button id="analyze-btn" disabled>Analyze Chart</button>
@@ -153,7 +213,7 @@ HTML = """<!DOCTYPE html>
       resultCard.style.display='none';hideError();
       const fd=new FormData();
       fd.append('chart',selectedFile,selectedFile.name);
-      fd.append('question',questionEl.value.trim()||'Analyze this chart and give me a trading recommendation.');
+      fd.append('question',questionEl.value.trim()||'Apply the GoldScalperPro framework to this chart. Tell me the signal and exact entry/SL/TP levels.');
       try{
         const res=await fetch('/analyze',{method:'POST',body:fd});
         const data=await res.json();
@@ -163,7 +223,7 @@ HTML = """<!DOCTYPE html>
       finally{analyzeBtn.disabled=false;analyzeBtn.textContent='Analyze Chart'}
     });
 
-    resetBtn.addEventListener('click',()=>{resultCard.style.display='none';reset();questionEl.value='Analyze this chart and give me a trading recommendation.'});
+    resetBtn.addEventListener('click',()=>{resultCard.style.display='none';reset();questionEl.value='Apply the GoldScalperPro framework to this chart. Tell me the signal and exact entry/SL/TP levels.'});
     function showError(m){errorMsg.textContent='⚠ '+m;errorMsg.style.display='block'}
     function hideError(){errorMsg.style.display='none'}
   </script>
@@ -183,7 +243,7 @@ def analyze():
         return jsonify({"error": "No image uploaded"}), 400
 
     f = request.files["chart"]
-    question = request.form.get("question", "Analyze this chart and give me a trading recommendation.")
+    question = request.form.get("question", "Apply the GoldScalperPro framework to this chart. Tell me the signal and exact entry/SL/TP levels.")
 
     img_b64 = base64.standard_b64encode(f.read()).decode()
     fname = f.filename.lower()
@@ -195,7 +255,7 @@ def analyze():
         client = anthropic.Anthropic(api_key=API_KEY)
         resp = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=1024,
+            max_tokens=2048,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": [
                 {"type": "image", "source": {"type": "base64", "media_type": media, "data": img_b64}},
