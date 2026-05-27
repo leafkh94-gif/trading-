@@ -145,6 +145,41 @@ class CapitalClient:
             }
         return None
 
+    def place_order(self, direction, size=0.01, stop_pts=None, tp_pts=None, epic="GOLD"):
+        payload = {
+            "epic": epic,
+            "direction": direction.upper(),
+            "size": str(size),
+            "guaranteedStop": False,
+            "trailingStop": False
+        }
+        if stop_pts: payload["stopDistance"] = str(stop_pts)
+        if tp_pts:   payload["profitDistance"] = str(tp_pts)
+        try:
+            r = http.post(f"{self.BASE}/api/v1/positions",
+                          headers=self._h(), json=payload, timeout=10)
+            if r.status_code == 401:
+                if self.login():
+                    r = http.post(f"{self.BASE}/api/v1/positions",
+                                  headers=self._h(), json=payload, timeout=10)
+            if r.status_code in [200, 201]:
+                return {"ok": True, "data": r.json()}
+            return {"ok": False, "error": f"Order failed ({r.status_code}): {r.text[:200]}"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def close_position(self, deal_id):
+        try:
+            r = http.delete(f"{self.BASE}/api/v1/positions/{deal_id}",
+                            headers=self._h(), timeout=10)
+            if r.status_code == 401:
+                if self.login():
+                    r = http.delete(f"{self.BASE}/api/v1/positions/{deal_id}",
+                                    headers=self._h(), timeout=10)
+            return r.status_code in [200, 204]
+        except Exception:
+            return False
+
 # ── Fallback price thread ─────────────────────────────────────────────────────
 def price_worker():
     while True:
@@ -163,13 +198,13 @@ def price_worker():
         time.sleep(30)
 
 # ── System prompt ─────────────────────────────────────────────────────────────
-SYSTEM = """You are GoldScalperPro AI — a professional Gold (XAU/USD) trading assistant.
+SYSTEM = """You are GoldScalperPro AI — a professional Gold (XAU/USD) trading assistant with the ability to execute real trades on Capital.com.
 
 You have real-time access to:
 - Live XAUUSD price from the user's Capital.com account
 - User's open Capital.com positions (size, direction, P&L, stop loss)
 - Account balance and equity
-- TradingView alerts (injected when received)
+- TradingView alerts
 - Full conversation history
 
 You think using the GoldScalperPro strategy:
@@ -185,6 +220,14 @@ When user asks "should I trade?" or "what should I do?":
 
 When analyzing a chart image:
 **📊 MARKET STRUCTURE** | **📍 KEY LEVELS** | **📈 INDICATORS** | **🎯 SIGNAL** | **💰 TRADE PLAN** | **⚠️ RISK NOTES**
+
+EXECUTING TRADES:
+When the user says "place the trade", "buy now", "sell now", "execute", "do it", or similar — AND Capital.com is connected — output a trade command on its own line at the END of your reply:
+[TRADE:BUY:0.01:SL150:TP300]
+Format: [TRADE:{BUY or SELL}:{lot size}:SL{stop loss points}:TP{take profit points}]
+Use 0.01 lots as default. SL default = 150 points. TP default = 300 points.
+Adjust size based on account equity if known (1% risk rule).
+ONLY output [TRADE:...] when the user explicitly confirms they want to execute.
 
 Trade monitoring rules:
 - Warn immediately if any position has stop loss within 30 points of current price
@@ -297,6 +340,40 @@ def clear():
     if session.get("username"):
         get_user(session["username"])["conversation"].clear()
     return jsonify({"status":"cleared"})
+
+@app.route("/trade", methods=["POST"])
+def trade():
+    if not session.get("username"): return jsonify({"error":"not logged in"}), 401
+    c = get_user(session["username"]).get("capital")
+    if not c or not c.connected:
+        return jsonify({"error": "Connect your Capital.com account first."}), 400
+    d = request.get_json(silent=True) or {}
+    direction = d.get("direction","").upper()
+    if direction not in ["BUY","SELL"]:
+        return jsonify({"error":"Invalid direction"}), 400
+    result = c.place_order(
+        direction,
+        size    = float(d.get("size", 0.01)),
+        stop_pts= d.get("stop_pts"),
+        tp_pts  = d.get("tp_pts")
+    )
+    if result.get("ok"):
+        msg = f"✅ {direction} order placed successfully."
+        get_user(session["username"])["conversation"].append(
+            {"role":"user","content": f"Trade executed: {direction} {d.get('size',0.01)} lots on GOLD"})
+        get_user(session["username"])["conversation"].append(
+            {"role":"assistant","content": msg})
+    return jsonify(result)
+
+@app.route("/close_position", methods=["POST"])
+def close_pos():
+    if not session.get("username"): return jsonify({"error":"not logged in"}), 401
+    c = get_user(session["username"]).get("capital")
+    if not c or not c.connected:
+        return jsonify({"error":"Connect your Capital.com account first."}), 400
+    d = request.get_json(silent=True) or {}
+    ok = c.close_position(d.get("deal_id",""))
+    return jsonify({"ok": ok})
 
 # ── Chat ──────────────────────────────────────────────────────────────────────
 @app.route("/chat", methods=["POST"])
@@ -489,14 +566,18 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
       <div class="sh">💳 Capital.com Account</div>
       <div class="sb2">
         <div id="conn-status"><span class="dot off"></span>Not connected</div>
-        <div id="acct-info" style="display:none" class="acbx" style="margin-top:8px"></div>
+        <div id="acct-info" style="display:none" class="acbx"></div>
         <div id="conn-form" class="cf">
+          <div style="color:#555;font-size:.67rem;margin-bottom:6px;line-height:1.5">
+            Need your Capital.com API key?<br>
+            Log into Capital.com → My Account → <b style="color:#888">API Keys</b> → Generate Key
+          </div>
           <label>API Key</label>
-          <input id="c-key" placeholder="From Capital.com settings"/>
+          <input id="c-key" placeholder="Paste your API key here"/>
           <label>Email</label>
           <input id="c-id" placeholder="your@email.com" type="email"/>
           <label>Password</label>
-          <input id="c-pw" placeholder="Capital.com password" type="password"/>
+          <input id="c-pw" placeholder="Your Capital.com password" type="password"/>
           <label style="display:flex;align-items:center;gap:5px;cursor:pointer;color:#888;margin-top:7px">
             <input type="checkbox" id="c-demo" style="width:auto"> Demo account
           </label>
@@ -533,6 +614,20 @@ function onFile(i){ selFile=i.files[0]||null; document.getElementById('att').cla
 function ar(el){ el.style.height='38px'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
 function onKey(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} }
 
+// Parse [TRADE:BUY:0.01:SL150:TP300] from AI reply
+function parseTrade(text){
+  const m = text.match(/\[TRADE:(BUY|SELL):([\d.]+):SL(\d+):TP(\d+)\]/i);
+  if(!m) return null;
+  return {direction:m[1].toUpperCase(), size:parseFloat(m[2]), stop_pts:parseInt(m[3]), tp_pts:parseInt(m[4])};
+}
+
+function fmtReply(text){
+  // Remove the raw trade command from displayed text
+  let clean = text.replace(/\[TRADE:[^\]]+\]/gi,'').trim();
+  return clean.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+               .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+}
+
 async function send(){
   const ti=document.getElementById('ti'), txt=ti.value.trim();
   if(!txt&&!selFile) return;
@@ -555,16 +650,63 @@ async function send(){
   selFile=null; document.getElementById('fi').value=''; document.getElementById('att').classList.remove('on');
 
   try{
-    const d=await(await fetch('/chat',{method:'POST',body:fd})).json();
+    const resp = await fetch('/chat',{method:'POST',body:fd});
+    const d = await resp.json();
     typ.remove();
-    const bd=document.createElement('div'); bd.className='msg b';
-    bd.innerHTML=fmt(d.reply||'Error: '+(d.error||'?')); msgs.appendChild(bd);
-  }catch(e){ typ.remove(); addMsg('Connection error.'); }
+
+    if(d.error){
+      // Show errors prominently in red
+      const err=document.createElement('div');
+      err.className='msg b';
+      err.style.cssText='border-color:#ef5350;background:#2b1010;color:#ef5350';
+      err.textContent = '⚠️ ' + d.error;
+      msgs.appendChild(err);
+    } else {
+      const bd=document.createElement('div'); bd.className='msg b';
+      bd.innerHTML=fmtReply(d.reply||''); msgs.appendChild(bd);
+
+      // Check if AI wants to execute a trade
+      const trade = parseTrade(d.reply||'');
+      if(trade){
+        const btn=document.createElement('div');
+        btn.className='msg b';
+        btn.style.cssText='border-color:#f5c518;background:#1a1800;padding:10px 12px';
+        btn.innerHTML=`<div style="color:#f5c518;font-weight:700;margin-bottom:7px">⚡ Trade Ready to Execute</div>
+          <div style="color:#ccc;font-size:.82rem;margin-bottom:8px">
+            ${trade.direction} Gold &nbsp;|&nbsp; Size: ${trade.size} lots &nbsp;|&nbsp; SL: ${trade.stop_pts} pts &nbsp;|&nbsp; TP: ${trade.tp_pts} pts
+          </div>
+          <button onclick="executeTrade(${JSON.stringify(trade).replace(/"/g,"'")})" style="background:#f5c518;color:#0d0f14;border:none;border-radius:6px;padding:7px 16px;font-weight:700;cursor:pointer;font-size:.82rem;margin-right:8px">✓ Place Order</button>
+          <button onclick="this.parentElement.remove()" style="background:#1e2235;color:#888;border:1px solid #2a2d35;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:.82rem">✗ Cancel</button>`;
+        msgs.appendChild(btn);
+      }
+    }
+  }catch(e){ typ.remove(); addErrMsg('Could not reach the server. Is the black window still open?'); }
   msgs.scrollTop=msgs.scrollHeight; sb.disabled=false; ti.focus();
 }
 
+async function executeTrade(trade){
+  const msgs=document.getElementById('msgs');
+  const info=document.createElement('div'); info.className='msg b typ'; info.textContent='Placing order…';
+  msgs.appendChild(info); msgs.scrollTop=msgs.scrollHeight;
+  try{
+    const d=await(await fetch('/trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(trade)})).json();
+    info.remove();
+    const bd=document.createElement('div'); bd.className='msg b';
+    if(d.ok){
+      bd.style.cssText='border-color:#26a69a;background:#0d2020';
+      bd.innerHTML='<strong style="color:#26a69a">✅ Order placed successfully!</strong><br><span style="color:#888;font-size:.78rem">Check your Capital.com account to confirm.</span>';
+    } else {
+      bd.style.cssText='border-color:#ef5350;background:#2b1010;color:#ef5350';
+      bd.textContent='❌ Order failed: '+(d.error||'Unknown error');
+    }
+    msgs.appendChild(bd);
+    refreshPositions();
+  }catch(e){ info.remove(); addErrMsg('Order request failed.'); }
+  msgs.scrollTop=msgs.scrollHeight;
+}
+
 function addMsg(t){ const d=document.createElement('div'); d.className='msg b'; d.textContent=t; document.getElementById('msgs').appendChild(d); }
-function fmt(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>'); }
+function addErrMsg(t){ const d=document.createElement('div'); d.className='msg b'; d.style.cssText='border-color:#ef5350;background:#2b1010;color:#ef5350'; d.textContent='⚠️ '+t; document.getElementById('msgs').appendChild(d); }
 async function clearChat(){ await fetch('/clear',{method:'POST'}); document.getElementById('msgs').innerHTML='<div class="wel">Chat cleared.</div>'; }
 
 async function connectCapital(){
