@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: goldscalper-ai
+    runtime: python
+    plan: free
+    buildCommand: pip install anthropic flask yfinance requests
+    startCommand: python gold_agent.py
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ACCESS_PASSWORD
+        value: gold2024
+      - key: SECRET_KEY
+        generateValue: true

@@ -464,10 +464,14 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
   <div id="chat">
     <div id="msgs">
       <div class="wel">
-        Welcome back, <b>{{UN}}</b> 👋<br>
-        Connect your Capital.com account in the sidebar →<br>
-        Then ask me anything: <em>"Should I trade Gold right now?"</em><br>
-        or attach a chart for a full analysis.
+        Welcome, <b>{{UN}}</b> 👋<br><br>
+        <b>You can start right now — no account needed.</b><br><br>
+        Ask me anything:<br>
+        <em>"Should I buy Gold right now?"</em><br>
+        <em>"Is this a good entry point?"</em><br>
+        <em>"What is Gold doing today?"</em><br><br>
+        📎 Attach a chart screenshot for a full analysis.<br><br>
+        <span style="color:#555;font-size:.78rem">Optional: connect your Capital.com account<br>in the sidebar to see your live trades &amp; balance.</span>
       </div>
     </div>
     <div id="ibar">
@@ -632,7 +636,8 @@ refreshAlerts(); setInterval(refreshAlerts,12000);
 if __name__ == "__main__":
     if HAS_YFINANCE:
         threading.Thread(target=price_worker, daemon=True).start()
+    port = int(os.environ.get("PORT", 5000))
     print(f"\n GoldScalperPro AI — Final Version")
-    print(f" Open   : http://localhost:5000")
+    print(f" Open   : http://localhost:{port}")
     print(f" Password: {ACCESS_PASSWORD}  (change: set ACCESS_PASSWORD=yourpassword)\n")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)
