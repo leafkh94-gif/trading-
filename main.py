@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 def generate_sample_market_data(periods: int = 100) -> pd.DataFrame:
     """Generate realistic market price data for demonstration."""
     
-    dates = pd.date_range('2024-01-01', periods=periods, freq='1H')
+    dates = pd.date_range('2024-01-01', periods=periods, freq='1h')
     
     # Start price around typical gold levels
     start_price = 2050.0
@@ -288,8 +288,10 @@ def demonstrate_risk_management():
     logger.info(f"  Entry: ${entry_price}")
     logger.info(f"  Stop-Loss: ${stop_loss_price}")
     logger.info(f"  Valid: {validation.is_valid}")
-    logger.info(f"  Suggested Lot Size: {validation.suggested_lot_size}")
-    logger.info(f"  Suggested Take-Profit: ${validation.suggested_take_profit:.2f}")
+    lot_size = validation.suggested_lot_size if validation.suggested_lot_size is not None else 'N/A'
+    take_profit = validation.suggested_take_profit if validation.suggested_take_profit is not None else 'N/A'
+    logger.info(f"  Suggested Lot Size: {lot_size}")
+    logger.info(f"  Suggested Take-Profit: ${take_profit:.2f}" if isinstance(take_profit, float) else f"  Suggested Take-Profit: {take_profit}")
     logger.info(f"  Reason: {validation.reason}")
 
 
