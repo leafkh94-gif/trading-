@@ -30,7 +30,6 @@ echo.
 
 REM ── Settings ───────────────────────────────────
 set ANTHROPIC_API_KEY=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
-set ACCESS_PASSWORD=gold2024
 
 REM ── Install required packages ───────────────────
 echo  Installing packages (first run only, takes ~1 minute)...
@@ -38,54 +37,50 @@ pip install --quiet --upgrade anthropic flask yfinance requests
 echo  Done.
 echo.
 
-REM ── Start agent, then open browser after it's ready ───
+REM ── Download the phone-link tool (first run only) ───
+if not exist cloudflared.exe (
+    echo  Downloading the phone-link tool (first run only)...
+    powershell -Command "try { Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe' -OutFile 'cloudflared.exe' } catch { exit 1 }"
+    if errorlevel 1 (
+        echo  Could not download the phone-link tool. You can still use it on this PC.
+    ) else (
+        echo  Done.
+    )
+)
+echo.
+
+REM ── Start the agent in the background ───────────
 echo  Starting agent...
 start /b "" python gold_agent.py
 
 echo  Waiting for server to start...
-timeout /t 10 /nobreak >nul
+timeout /t 8 /nobreak >nul
 
-echo  Opening browser...
+REM ── Open it on this computer ────────────────────
 start "" "http://localhost:5000"
 
-REM If browser shows error, wait 5 more seconds and try again
-timeout /t 5 /nobreak >nul
-start "" "http://localhost:5000"
-
-REM ── Find this PC's WiFi address for phone access ───
-set PHONE_IP=
-for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
-    set IPLINE=%%a
-    call :trim
-)
-goto :showinfo
-
-:trim
-set IPLINE=%IPLINE: =%
-echo %IPLINE% | findstr /b "192.168 10. 172." >nul && set PHONE_IP=%IPLINE%
-goto :eof
-
-:showinfo
 echo.
 echo  ==============================================
 echo    AGENT IS RUNNING
 echo  ==============================================
 echo.
 echo   On THIS computer:  http://localhost:5000
-if defined PHONE_IP (
-echo.
-echo   On your PHONE ^(same WiFi^), open this in the browser:
-echo.
-echo        http://%PHONE_IP%:5000
-echo.
-)
-echo  ----------------------------------------------
-echo  DO NOT close this window while using the agent.
-echo  To stop: close this window.
-echo  ==============================================
 echo.
 
-REM Keep window open
-:loop
-timeout /t 60 /nobreak >nul
-goto loop
+REM ── Create the public phone link ────────────────
+if exist cloudflared.exe (
+    echo   Creating your PHONE link... watch for the address below.
+    echo   It looks like:  https://something.trycloudflare.com
+    echo   Open THAT address on your phone (works anywhere, even mobile data).
+    echo.
+    echo  ==============================================
+    echo.
+    cloudflared.exe tunnel --url http://localhost:5000
+) else (
+    echo   DO NOT close this window while using the agent.
+    echo   To stop: close this window.
+    echo  ==============================================
+    :loop
+    timeout /t 60 /nobreak >nul
+    goto loop
+)
