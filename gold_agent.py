@@ -450,8 +450,9 @@ if __name__ == "__main__":
     else:
         print(" TIP: Run 'pip install yfinance' to enable live price feed")
 
+    port = int(os.environ.get("PORT", 5000))
     print("\n GoldScalperPro AI Agent v2")
-    print(" Chat  : http://localhost:5000")
-    print(" Trades: POST http://localhost:5000/trades  (from TradeMonitor.mq4)")
-    print(" Alerts: POST http://localhost:5000/webhook (from TradingView)\n")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    print(f" Chat  : http://localhost:{port}")
+    print(f" Trades: POST http://localhost:{port}/trades  (from TradeMonitor.mq4)")
+    print(f" Alerts: POST http://localhost:{port}/webhook (from TradingView)\n")
+    app.run(host="0.0.0.0", port=port, debug=False)
