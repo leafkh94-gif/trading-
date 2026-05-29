@@ -52,11 +52,37 @@ REM If browser shows error, wait 5 more seconds and try again
 timeout /t 5 /nobreak >nul
 start "" "http://localhost:5000"
 
+REM ── Find this PC's WiFi address for phone access ───
+set PHONE_IP=
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
+    set IPLINE=%%a
+    call :trim
+)
+goto :showinfo
+
+:trim
+set IPLINE=%IPLINE: =%
+echo %IPLINE% | findstr /b "192.168 10. 172." >nul && set PHONE_IP=%IPLINE%
+goto :eof
+
+:showinfo
 echo.
-echo  Agent is running at: http://localhost:5000
+echo  ==============================================
+echo    AGENT IS RUNNING
+echo  ==============================================
 echo.
+echo   On THIS computer:  http://localhost:5000
+if defined PHONE_IP (
+echo.
+echo   On your PHONE ^(same WiFi^), open this in the browser:
+echo.
+echo        http://%PHONE_IP%:5000
+echo.
+)
+echo  ----------------------------------------------
 echo  DO NOT close this window while using the agent.
 echo  To stop: close this window.
+echo  ==============================================
 echo.
 
 REM Keep window open
