@@ -43,9 +43,13 @@ echo  Starting agent...
 start /b "" python gold_agent.py
 
 echo  Waiting for server to start...
-timeout /t 5 /nobreak >nul
+timeout /t 10 /nobreak >nul
 
 echo  Opening browser...
+start "" "http://localhost:5000"
+
+REM If browser shows error, wait 5 more seconds and try again
+timeout /t 5 /nobreak >nul
 start "" "http://localhost:5000"
 
 echo.
