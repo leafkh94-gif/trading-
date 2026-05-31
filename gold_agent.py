@@ -18,10 +18,7 @@ try:
 except ImportError:
     HAS_YFINANCE = False
 
-API_KEY = os.environ.get(
-    "ANTHROPIC_API_KEY",
-    "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"
-)
+API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 conversation = []
 live_price   = {"price": None, "change": None, "pct": None}

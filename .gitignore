@@ -2,3 +2,5 @@ chart_analyzer/.env
 __pycache__/
 *.pyc
 .env
+
+RUN_AGENT.bat
