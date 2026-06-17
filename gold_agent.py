@@ -971,9 +971,9 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
 /* ── Input bar ── */
 #input-bar{border-top:1px solid #1f2230;padding:10px 12px;display:flex;align-items:flex-end;gap:8px;flex-shrink:0;background:#111318}
 #attach-wrap{flex-shrink:0}
-#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#aaa;border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s;padding:0;position:relative;overflow:hidden;user-select:none}
+#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#aaa;border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s;padding:0;user-select:none}
 #attach-btn:hover{background:#252a3a;border-color:#f5c518;color:#f5c518}
-#attach-btn input[type="file"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+#file-input{position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0}
 #input-center{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
 #img-preview-wrap{display:flex;align-items:center;gap:6px;background:#1a1d2a;border-radius:8px;padding:6px 8px}
 #img-preview{height:48px;width:auto;border-radius:6px;object-fit:cover}
@@ -1027,12 +1027,12 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
   <div id="header-right">
     <span id="ticker" class="flat"></span>
     <a id="chart-scan-btn" href="/chart" target="_blank">📈 Chart Scan</a>
-    <button id="clear-btn" onclick="clearChat()">Clear chat</button>
+    <button id="clear-btn" type="button">Clear chat</button>
   </div>
 </div>
 
 <div id="agent-dropdown-wrap">
-  <select id="agent-select" onchange="switchAgent(this.value)"></select>
+  <select id="agent-select"></select>
 </div>
 
 <div id="body">
@@ -1054,20 +1054,19 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
       </div>
     </div>
 
+    <input type="file" id="file-input" accept="image/*"/>
     <div id="input-bar">
       <div id="attach-wrap">
-        <label id="attach-btn" title="Attach image">📎
-          <input type="file" id="file-input" accept="image/*" onchange="onFileSelected(this)"/>
-        </label>
+        <label id="attach-btn" for="file-input" title="Attach image">📎</label>
       </div>
       <div id="input-center">
         <div id="img-preview-wrap" style="display:none">
           <img id="img-preview" src=""/>
-          <button id="img-remove-btn" onclick="removeFile()" title="Remove">✕</button>
+          <button id="img-remove-btn" type="button" title="Remove">✕</button>
         </div>
-        <textarea id="msg-input" placeholder="Type a message…" onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
+        <textarea id="msg-input" placeholder="Type a message…"></textarea>
       </div>
-      <button id="send-btn" onclick="sendMessage()">➤</button>
+      <button id="send-btn" type="button">➤</button>
     </div>
   </div>
 
@@ -1208,6 +1207,16 @@ function autoResize(el){
 function onKey(e){
   if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
 }
+
+// Wire up all interactive elements via addEventListener — avoids mobile browser
+// restrictions on inline onclick/onkeydown/oninput attribute handlers
+document.getElementById('send-btn').addEventListener('click', sendMessage);
+document.getElementById('clear-btn').addEventListener('click', clearChat);
+document.getElementById('img-remove-btn').addEventListener('click', removeFile);
+document.getElementById('agent-select').addEventListener('change', function(){ switchAgent(this.value); });
+document.getElementById('file-input').addEventListener('change', function(){ onFileSelected(this); });
+document.getElementById('msg-input').addEventListener('keydown', onKey);
+document.getElementById('msg-input').addEventListener('input', function(){ autoResize(this); });
 
 async function sendMessage(){
   const input   = document.getElementById('msg-input');
