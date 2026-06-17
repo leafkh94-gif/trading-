@@ -625,7 +625,7 @@ def _capital_login():
         print(f"  Capital.com login error: {e}")
     return False
 
-def _capital_fetch():
+def _capital_fetch(retry=True):
     global _cap_cst, _cap_sec
     if not _cap_cst and not _capital_login():
         return
@@ -637,8 +637,8 @@ def _capital_fetch():
         )
         if r.status_code == 401:
             _cap_cst = None
-            if _capital_login():
-                _capital_fetch()
+            if retry and _capital_login():
+                _capital_fetch(retry=False)
             return
         if r.status_code == 200:
             with price_lock:
@@ -706,7 +706,8 @@ def set_agent():
 
 @app.route("/positions")
 def positions_endpoint():
-    return jsonify({"positions": capital_positions})
+    with price_lock:
+        return jsonify({"positions": list(capital_positions)})
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -802,6 +803,13 @@ def chat():
                  "image/jpeg" if fname.endswith((".jpg", ".jpeg")) else
                  "image/webp" if fname.endswith(".webp")  else "image/png")
         content.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}})
+        # Strip image bytes from all previous turns to prevent memory growth
+        for msg in conversation:
+            if isinstance(msg["content"], list):
+                for part in msg["content"]:
+                    if part.get("type") == "image" and "source" in part:
+                        part["source"] = {"type": "text", "text": "[earlier chart]"}
+                        part["type"] = "text"
 
     fallback = f"Analyze this chart as a {AGENTS[agent_id]['name']} analyst."
     content.append({"type": "text", "text": full_text or fallback})
@@ -1406,7 +1414,8 @@ resetBtn.addEventListener('click', ()=>{
 });
 
 function renderAnalysis(text){
-  resultBody.innerHTML = text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  const safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  resultBody.innerHTML = safe.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
   resultCard.style.display = 'block';
   resultCard.scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -1423,7 +1432,7 @@ if __name__ == "__main__":
     else:
         print(" TIP: pip install yfinance for live Gold price feed")
 
-    if HAS_REQUESTS and CAPITAL_API_KEY and CAPITAL_EMAIL:
+    if HAS_REQUESTS and CAPITAL_API_KEY and CAPITAL_PASSWORD and CAPITAL_EMAIL:
         threading.Thread(target=capital_worker, daemon=True).start()
         print(" Capital.com positions feed active")
     elif not CAPITAL_EMAIL:
