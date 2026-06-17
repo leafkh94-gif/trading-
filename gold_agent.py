@@ -911,10 +911,10 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
 
 /* ── Input bar ── */
 #input-bar{border-top:1px solid #1f2230;padding:10px 12px;display:flex;align-items:flex-end;gap:8px;flex-shrink:0;background:#111318}
-#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#888;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:1rem;flex-shrink:0;transition:border-color .2s}
+#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#888;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:1rem;flex-shrink:0;transition:border-color .2s;display:flex;align-items:center;justify-content:center;user-select:none}
 #attach-btn:hover{border-color:#f5c518}
 #attach-btn.has-file{border-color:#f5c518;color:#f5c518}
-#file-input{display:none}
+#file-input{position:absolute;width:0;height:0;opacity:0;overflow:hidden;pointer-events:none}
 #msg-input{flex:1;background:#0d0f14;border:1px solid #2a2d35;border-radius:8px;color:#e0e0e0;font-size:.88rem;padding:9px 12px;resize:none;height:40px;max-height:120px;font-family:inherit;outline:none;transition:border-color .2s;line-height:1.4}
 #msg-input:focus{border-color:#f5c518}
 #msg-input::placeholder{color:#444;font-size:.82rem}
