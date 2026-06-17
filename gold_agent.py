@@ -14,9 +14,9 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 import anthropic
 
+import pathlib
 try:
     from dotenv import load_dotenv
-    import pathlib
     load_dotenv(dotenv_path=pathlib.Path(__file__).parent / ".env")
 except ImportError:
     pass
@@ -970,10 +970,10 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
 
 /* ── Input bar ── */
 #input-bar{border-top:1px solid #1f2230;padding:10px 12px;display:flex;align-items:flex-end;gap:8px;flex-shrink:0;background:#111318}
-#attach-wrap{flex-shrink:0}
-#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#aaa;border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s;padding:0;user-select:none}
-#attach-btn:hover{background:#252a3a;border-color:#f5c518;color:#f5c518}
-#file-input{position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0}
+#attach-wrap{flex-shrink:0;position:relative;width:38px;height:38px}
+#attach-icon{background:#1e2235;border:1px solid #2a2d35;color:#aaa;border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;transition:background .15s,border-color .15s;pointer-events:none;user-select:none}
+#attach-wrap:hover #attach-icon{background:#252a3a;border-color:#f5c518;color:#f5c518}
+#file-input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border-radius:50%}
 #input-center{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
 #img-preview-wrap{display:flex;align-items:center;gap:6px;background:#1a1d2a;border-radius:8px;padding:6px 8px}
 #img-preview{height:48px;width:auto;border-radius:6px;object-fit:cover}
@@ -1054,10 +1054,10 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
       </div>
     </div>
 
-    <input type="file" id="file-input" accept="image/*"/>
     <div id="input-bar">
-      <div id="attach-wrap">
-        <label id="attach-btn" for="file-input" title="Attach image">📎</label>
+      <div id="attach-wrap" title="Attach image">
+        <div id="attach-icon">📎</div>
+        <input type="file" id="file-input" accept="image/*"/>
       </div>
       <div id="input-center">
         <div id="img-preview-wrap" style="display:none">
@@ -1183,11 +1183,11 @@ function onFileSelected(input){
   if(selectedFile){
     preview.src = URL.createObjectURL(selectedFile);
     wrap.style.display = 'flex';
-    document.getElementById('attach-btn').style.borderColor = '#f5c518';
+    document.getElementById('attach-icon').style.borderColor = '#f5c518';
   } else {
     wrap.style.display = 'none';
     preview.src = '';
-    document.getElementById('attach-btn').style.borderColor = '';
+    document.getElementById('attach-icon').style.borderColor = '';
   }
 }
 
@@ -1196,7 +1196,7 @@ function removeFile(){
   document.getElementById('file-input').value = '';
   document.getElementById('img-preview-wrap').style.display = 'none';
   document.getElementById('img-preview').src = '';
-  document.getElementById('attach-btn').style.borderColor = '';
+  document.getElementById('attach-icon').style.borderColor = '';
 }
 
 function autoResize(el){
@@ -1258,7 +1258,7 @@ async function sendMessage(){
   document.getElementById('file-input').value = '';
   document.getElementById('img-preview-wrap').style.display = 'none';
   document.getElementById('img-preview').src = '';
-  document.getElementById('attach-btn').style.borderColor = '';
+  document.getElementById('attach-icon').style.borderColor = '';
 
   try{
     const res  = await fetch('/chat',{method:'POST',body:fd});
