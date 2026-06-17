@@ -1,11 +1,11 @@
 """
 Trading AI Hub — Multi-Agent Platform v3 + Gold Chart Analyzer
-15 AI analyst agents with independent conversation histories
+16 AI analyst agents with independent conversation histories
 + Capital.com live positions + Dedicated Gold Chart Analyzer
 
-Setup:  pip install anthropic flask yfinance requests
-Run:    set ANTHROPIC_API_KEY=your_key && python gold_agent.py
-Open:   http://localhost:5000          (15-agent chat hub)
+Setup:  pip install anthropic flask yfinance requests python-dotenv
+Run:    python gold_agent.py   (reads .env automatically)
+Open:   http://localhost:5000          (16-agent chat hub)
         http://localhost:5000/chart    (Gold Chart Analyzer)
 """
 
@@ -13,6 +13,12 @@ import base64, os, json, threading, time
 from datetime import datetime
 from flask import Flask, request, jsonify
 import anthropic
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 try:
     import requests as _requests
