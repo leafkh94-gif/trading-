@@ -950,9 +950,9 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
 <body>
 
 <div id="header">
-  <h1 id="header-title">🏆 GoldScalperPro AI</h1>
+  <h1 id="header-title">📊 Trading AI Hub</h1>
   <div id="header-right">
-    <span id="ticker" class="flat">XAUUSD —</span>
+    <span id="ticker" class="flat"></span>
     <a id="chart-scan-btn" href="/chart" target="_blank">📈 Chart Scan</a>
     <button id="clear-btn" onclick="clearChat()">Clear chat</button>
   </div>
@@ -977,7 +977,7 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
         <span class="welcome-icon">📈</span>
         <strong>Trading AI Hub</strong><br>
         Select an analyst from the left panel, then type your question.<br>
-        <span class="welcome-hint">Attach a chart screenshot for visual analysis · or use <strong>📈 Chart Scan</strong> for a quick Gold read.</span>
+        <span class="welcome-hint">Attach a chart screenshot for visual analysis · or use <strong>📈 Chart Scan</strong> for instant chart analysis.</span>
       </div>
     </div>
 
@@ -1197,7 +1197,7 @@ async function updatePrice(){
     const el = document.getElementById('ticker');
     if(d.price){
       const sign = d.change >= 0 ? '+' : '';
-      el.textContent = `XAUUSD $${d.price}  ${sign}${d.change} (${sign}${d.pct}%)`;
+      el.textContent = `Gold $${d.price}  ${sign}${d.change} (${sign}${d.pct}%)`;
       el.className   = d.change > 0 ? 'up' : d.change < 0 ? 'down' : 'flat';
     }
   } catch(e){}
@@ -1293,7 +1293,7 @@ footer{color:#444;font-size:.78rem;margin-top:16px}
 
 <header>
   <h1>📈 Gold Chart Analyzer</h1>
-  <p>Upload a chart screenshot — get an instant structured XAUUSD analysis</p>
+  <p>Upload a chart screenshot — get an instant structured analysis</p>
 </header>
 
 <div class="card">
