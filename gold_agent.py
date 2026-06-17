@@ -1,9 +1,9 @@
 """
 Trading AI Hub — Multi-Agent Platform v3 + Gold Chart Analyzer
 15 AI analyst agents with independent conversation histories
-+ Dedicated Gold Chart Analyzer (drag-and-drop, structured XAUUSD analysis)
++ Capital.com live positions + Dedicated Gold Chart Analyzer
 
-Setup:  pip install anthropic flask yfinance
+Setup:  pip install anthropic flask yfinance requests
 Run:    set ANTHROPIC_API_KEY=your_key && python gold_agent.py
 Open:   http://localhost:5000          (15-agent chat hub)
         http://localhost:5000/chart    (Gold Chart Analyzer)
@@ -15,18 +15,30 @@ from flask import Flask, request, jsonify
 import anthropic
 
 try:
+    import requests as _requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
+try:
     import yfinance as yf
     HAS_YFINANCE = True
 except ImportError:
     HAS_YFINANCE = False
 
-API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+API_KEY          = os.environ.get("ANTHROPIC_API_KEY", "")
+CAPITAL_API_KEY  = os.environ.get("CAPITAL_API_KEY", "")
+CAPITAL_PASSWORD = os.environ.get("CAPITAL_PASSWORD", "")
+CAPITAL_EMAIL    = os.environ.get("CAPITAL_EMAIL", "")
+CAPITAL_BASE     = "https://api-capital.backend-capital.com/api/v1"
 
 # ── Global live data ───────────────────────────────────────────────────────────
-open_trades = []
-tv_alerts   = []
-live_price  = {"price": None, "change": None, "pct": None, "updated": None}
-price_lock  = threading.Lock()
+capital_positions = []
+tv_alerts         = []
+live_price        = {"price": None, "change": None, "pct": None, "updated": None}
+price_lock        = threading.Lock()
+_cap_cst          = None
+_cap_sec          = None
 
 # ── System prompt constants ────────────────────────────────────────────────────
 
@@ -592,6 +604,64 @@ def price_worker():
                 pass
         time.sleep(30)
 
+# ── Capital.com live positions ─────────────────────────────────────────────────
+def _capital_login():
+    global _cap_cst, _cap_sec
+    if not (CAPITAL_API_KEY and CAPITAL_PASSWORD and CAPITAL_EMAIL):
+        return False
+    try:
+        r = _requests.post(
+            f"{CAPITAL_BASE}/session",
+            headers={"X-CAP-API-KEY": CAPITAL_API_KEY, "Content-Type": "application/json"},
+            json={"identifier": CAPITAL_EMAIL, "password": CAPITAL_PASSWORD, "encryptedPassword": False},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            _cap_cst = r.headers.get("CST")
+            _cap_sec = r.headers.get("X-SECURITY-TOKEN")
+            return True
+        print(f"  Capital.com login failed: {r.status_code} {r.text[:120]}")
+    except Exception as e:
+        print(f"  Capital.com login error: {e}")
+    return False
+
+def _capital_fetch():
+    global _cap_cst, _cap_sec
+    if not _cap_cst and not _capital_login():
+        return
+    try:
+        r = _requests.get(
+            f"{CAPITAL_BASE}/positions",
+            headers={"X-CAP-API-KEY": CAPITAL_API_KEY, "CST": _cap_cst, "X-SECURITY-TOKEN": _cap_sec},
+            timeout=10,
+        )
+        if r.status_code == 401:
+            _cap_cst = None
+            if _capital_login():
+                _capital_fetch()
+            return
+        if r.status_code == 200:
+            with price_lock:
+                capital_positions.clear()
+                for pos in r.json().get("positions", []):
+                    p = pos.get("position", {})
+                    m = pos.get("market", {})
+                    capital_positions.append({
+                        "symbol":    m.get("instrumentName", m.get("epic", "?")),
+                        "direction": p.get("direction", ""),
+                        "size":      p.get("size", 0),
+                        "open":      p.get("openLevel", 0),
+                        "pnl":       round(p.get("profit", 0), 2),
+                        "currency":  p.get("currency", ""),
+                    })
+    except Exception as e:
+        print(f"  Capital.com positions error: {e}")
+
+def capital_worker():
+    while True:
+        _capital_fetch()
+        time.sleep(15)
+
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 
@@ -634,15 +704,9 @@ def set_agent():
         "history_len":   len(agent_conversations[agent_id]),
     })
 
-@app.route("/trades", methods=["GET", "POST"])
-def trades_endpoint():
-    if request.method == "POST":
-        data = request.get_json(silent=True) or {}
-        with price_lock:
-            open_trades.clear()
-            open_trades.extend(data.get("trades", []))
-        return jsonify({"status": "ok"})
-    return jsonify({"trades": open_trades})
+@app.route("/positions")
+def positions_endpoint():
+    return jsonify({"positions": capital_positions})
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -723,9 +787,9 @@ def chat():
     ctx = []
     with price_lock:
         if live_price["price"]:
-            ctx.append(f"Live XAUUSD: ${live_price['price']} ({live_price['change']:+.2f} / {live_price['pct']:+.3f}%)")
-    if open_trades:
-        ctx.append("Open MT4 positions:\n" + json.dumps(open_trades, indent=2))
+            ctx.append(f"Live Gold (XAU/USD): ${live_price['price']} ({live_price['change']:+.2f} / {live_price['pct']:+.3f}%)")
+        if capital_positions:
+            ctx.append("Open Capital.com positions:\n" + json.dumps(capital_positions, indent=2))
 
     full_text = ("\n".join(ctx) + "\n\n" + text).strip() if ctx else text
 
@@ -918,20 +982,20 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
     </div>
 
     <div id="input-bar">
-      <button id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach chart">📎</button>
+      <label id="attach-btn" for="file-input" title="Attach chart">📎</label>
       <input type="file" id="file-input" accept="image/*" onchange="onFileSelected(this)"/>
       <textarea id="msg-input" placeholder="Select an agent to get started…" onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
       <button id="send-btn" onclick="sendMessage()">▶</button>
     </div>
   </div>
 
-  <!-- RIGHT: MT4 + Alerts -->
+  <!-- RIGHT: Capital.com + Alerts -->
   <div id="right-sidebar">
 
     <div class="panel" style="flex:0 0 auto">
-      <div class="panel-header">📊 Open MT4 Trades</div>
+      <div class="panel-header">📊 Capital.com Positions</div>
       <div class="panel-body" id="trades-panel">
-        <div class="no-data">No trades received yet.<br>Run TradeMonitor.mq4 in MT4.</div>
+        <div class="no-data" id="no-positions">Connecting to Capital.com…</div>
       </div>
     </div>
 
@@ -945,7 +1009,9 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
     <div id="tv-setup">
       <b style="color:#888">TradingView webhook:</b><br>
       Alert → Notifications → Webhook URL:<br>
-      <code style="color:#f5c518">http://YOUR-IP:5000/webhook</code>
+      <code style="color:#f5c518">http://YOUR-IP:5000/webhook</code><br><br>
+      <b style="color:#888">Capital.com:</b> Set<br>
+      <code style="color:#f5c518">CAPITAL_EMAIL</code> in your .env
     </div>
 
   </div>
@@ -1139,21 +1205,20 @@ async function updatePrice(){
 
 async function updateTrades(){
   try{
-    const d     = await (await fetch('/trades')).json();
+    const d     = await (await fetch('/positions')).json();
     const panel = document.getElementById('trades-panel');
-    if(!d.trades || !d.trades.length){
-      panel.innerHTML = '<div class="no-data">No open trades.<br>Run TradeMonitor.mq4 in MT4.</div>';
+    if(!d.positions || !d.positions.length){
+      panel.innerHTML = '<div class="no-data">No open positions.<br>Set CAPITAL_EMAIL in .env to connect.</div>';
       return;
     }
-    panel.innerHTML = d.trades.map(t => {
+    panel.innerHTML = d.positions.map(t => {
       const pnlClass = t.pnl >= 0 ? 'pos' : 'neg';
       const sign     = t.pnl >= 0 ? '+' : '';
       const dirClass = t.direction === 'BUY' ? 'buy' : 'sell';
       return `<div class="trade-card">
         <div><span class="symbol">${t.symbol}</span><span class="dir ${dirClass}">${t.direction}</span></div>
-        <div class="detail">Lots: ${t.lots} | Open: ${t.open}</div>
-        <div class="detail">SL: ${t.sl||'—'} | TP: ${t.tp||'—'}</div>
-        <div class="pnl ${pnlClass}">${sign}$${t.pnl.toFixed(2)} (${t.pips.toFixed(1)} pts)</div>
+        <div class="detail">Size: ${t.size} | Open: ${t.open}</div>
+        <div class="pnl ${pnlClass}">${sign}${t.pnl} ${t.currency}</div>
       </div>`;
     }).join('');
   } catch(e){}
@@ -1354,13 +1419,18 @@ function hideError(){ errorMsg.style.display = 'none'; }
 if __name__ == "__main__":
     if HAS_YFINANCE:
         threading.Thread(target=price_worker, daemon=True).start()
-        print(" Live price feed active (XAUUSD via yfinance)")
+        print(" Live Gold price feed active (XAU/USD via yfinance)")
     else:
-        print(" TIP: Run 'pip install yfinance' to enable live price feed")
+        print(" TIP: pip install yfinance for live Gold price feed")
+
+    if HAS_REQUESTS and CAPITAL_API_KEY and CAPITAL_EMAIL:
+        threading.Thread(target=capital_worker, daemon=True).start()
+        print(" Capital.com positions feed active")
+    elif not CAPITAL_EMAIL:
+        print(" TIP: Set CAPITAL_EMAIL in .env to enable Capital.com positions")
 
     print(f"\n Trading AI Hub — {len(AGENTS)} AI Analysts + Gold Chart Analyzer")
     print(" Chat hub    : http://localhost:5000")
     print(" Chart Scan  : http://localhost:5000/chart")
-    print(" Trades      : POST http://localhost:5000/trades  (from TradeMonitor.mq4)")
     print(" Alerts      : POST http://localhost:5000/webhook (from TradingView)\n")
     app.run(host="0.0.0.0", port=5000, debug=False)
