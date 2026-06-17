@@ -911,15 +911,20 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
 
 /* ── Input bar ── */
 #input-bar{border-top:1px solid #1f2230;padding:10px 12px;display:flex;align-items:flex-end;gap:8px;flex-shrink:0;background:#111318}
-#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#888;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:1rem;flex-shrink:0;transition:border-color .2s;display:flex;align-items:center;justify-content:center;user-select:none}
-#attach-btn:hover{border-color:#f5c518}
-#attach-btn.has-file{border-color:#f5c518;color:#f5c518}
-#file-input{position:absolute;width:0;height:0;opacity:0;overflow:hidden;pointer-events:none}
-#msg-input{flex:1;background:#0d0f14;border:1px solid #2a2d35;border-radius:8px;color:#e0e0e0;font-size:.88rem;padding:9px 12px;resize:none;height:40px;max-height:120px;font-family:inherit;outline:none;transition:border-color .2s;line-height:1.4}
+#attach-wrap{flex-shrink:0;position:relative}
+#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#aaa;border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s;padding:0}
+#attach-btn:hover{background:#252a3a;border-color:#f5c518;color:#f5c518}
+#input-center{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+#img-preview-wrap{display:flex;align-items:center;gap:6px;background:#1a1d2a;border-radius:8px;padding:6px 8px}
+#img-preview{height:48px;width:auto;border-radius:6px;object-fit:cover}
+#img-remove-btn{background:transparent;border:none;color:#888;cursor:pointer;font-size:.85rem;padding:2px 4px;border-radius:4px;flex-shrink:0}
+#img-remove-btn:hover{color:#ef5350}
+#msg-input{width:100%;background:#0d0f14;border:1px solid #2a2d35;border-radius:20px;color:#e0e0e0;font-size:.9rem;padding:10px 16px;resize:none;height:42px;max-height:120px;font-family:inherit;outline:none;transition:border-color .2s;line-height:1.4}
 #msg-input:focus{border-color:#f5c518}
-#msg-input::placeholder{color:#444;font-size:.82rem}
-#send-btn{background:#f5c518;color:#0d0f14;border:none;border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:700;font-size:.9rem;flex-shrink:0;transition:opacity .2s}
-#send-btn:disabled{opacity:.4;cursor:not-allowed}
+#msg-input::placeholder{color:#555;font-size:.85rem}
+#send-btn{background:#f5c518;color:#0d0f14;border:none;border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1.1rem;flex-shrink:0;transition:opacity .2s,transform .1s;display:flex;align-items:center;justify-content:center;padding:0}
+#send-btn:hover{transform:scale(1.08)}
+#send-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
 
 /* ── Right sidebar ── */
 #right-sidebar{width:260px;border-left:1px solid #1f2230;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
@@ -990,10 +995,18 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
     </div>
 
     <div id="input-bar">
-      <label id="attach-btn" for="file-input" title="Attach chart">📎</label>
-      <input type="file" id="file-input" accept="image/*" onchange="onFileSelected(this)"/>
-      <textarea id="msg-input" placeholder="Select an agent to get started…" onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
-      <button id="send-btn" onclick="sendMessage()">▶</button>
+      <div id="attach-wrap">
+        <button id="attach-btn" type="button" onclick="document.getElementById('file-input').click()" title="Attach image">📎</button>
+        <input type="file" id="file-input" accept="image/*,image/gif" style="display:none" onchange="onFileSelected(this)"/>
+      </div>
+      <div id="input-center">
+        <div id="img-preview-wrap" style="display:none">
+          <img id="img-preview" src=""/>
+          <button id="img-remove-btn" onclick="removeFile()" title="Remove">✕</button>
+        </div>
+        <textarea id="msg-input" placeholder="Type a message…" onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
+      </div>
+      <button id="send-btn" onclick="sendMessage()">➤</button>
     </div>
   </div>
 
@@ -1105,9 +1118,25 @@ function updateHeaderAndHint(agentId){
 
 function onFileSelected(input){
   selectedFile = input.files[0] || null;
-  const btn = document.getElementById('attach-btn');
-  btn.classList.toggle('has-file', !!selectedFile);
-  btn.title = selectedFile ? selectedFile.name : 'Attach chart';
+  const wrap    = document.getElementById('img-preview-wrap');
+  const preview = document.getElementById('img-preview');
+  if(selectedFile){
+    preview.src = URL.createObjectURL(selectedFile);
+    wrap.style.display = 'flex';
+    document.getElementById('attach-btn').style.borderColor = '#f5c518';
+  } else {
+    wrap.style.display = 'none';
+    preview.src = '';
+    document.getElementById('attach-btn').style.borderColor = '';
+  }
+}
+
+function removeFile(){
+  selectedFile = null;
+  document.getElementById('file-input').value = '';
+  document.getElementById('img-preview-wrap').style.display = 'none';
+  document.getElementById('img-preview').src = '';
+  document.getElementById('attach-btn').style.borderColor = '';
 }
 
 function autoResize(el){
@@ -1157,8 +1186,9 @@ async function sendMessage(){
 
   selectedFile = null;
   document.getElementById('file-input').value = '';
-  document.getElementById('attach-btn').classList.remove('has-file');
-  document.getElementById('attach-btn').title = 'Attach chart';
+  document.getElementById('img-preview-wrap').style.display = 'none';
+  document.getElementById('img-preview').src = '';
+  document.getElementById('attach-btn').style.borderColor = '';
 
   try{
     const res  = await fetch('/chat',{method:'POST',body:fd});
