@@ -783,7 +783,7 @@ def _clean_history(hist):
             result.append(m)
     return result
 
-# ── Embedded HTML — main hub ───────────────────────────────────────────────────
+# ── Embedded HTML — main hub ─────────────────────────────────────────────────────────────
 HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1015,7 +1015,7 @@ async function switchAgent(agentId){
       msgs.innerHTML = `<div class="welcome">
         <span class="welcome-icon">${a.emoji||'🤖'}</span>
         Switched to <strong>${a.name}</strong>.<br>
-        <span class="welcome-hint">Try: "${a.template_hint||''}"</span>
+        <span class="welcome-hint">Try: "${a.template_hint||\'\'}"</span>
       </div>`;
     }
     updateHeaderAndHint(agentId);
@@ -1181,7 +1181,7 @@ updateAlerts(); setInterval(updateAlerts, 15000);
 </body>
 </html>"""
 
-# ── Embedded HTML — Gold Chart Analyzer ───────────────────────────────────────
+# ── Embedded HTML — Gold Chart Analyzer ───────────────────────────────────────────────
 CHART_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
