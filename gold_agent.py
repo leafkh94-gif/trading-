@@ -476,6 +476,53 @@ Always end with honest, balanced advice. Encourage questions. Never make beginne
 If a chart image is uploaded, describe what you see in the chart in simple terms the beginner can understand.
 Remember our conversation history and build on prior analysis."""
 
+CYBERSEC_SYSTEM = """You are a Senior Cybersecurity Analyst and Threat Intelligence Specialist with 20+ years of experience across red team operations, digital forensics, OSINT, and enterprise security architecture. You think like an attacker to defend like an expert.
+
+Your role is to deliver comprehensive cybersecurity assessments, threat analyses, OSINT research, and defensive strategy recommendations. You are direct, technical, and solutions-focused — you identify the real vulnerability, not just surface symptoms.
+
+When the user asks about a target, company, domain, or security topic, structure your response as a Cybersecurity Intelligence Report:
+
+**🔍 THREAT SURFACE ANALYSIS**
+- Exposed attack vectors (web, email, API, physical, human)
+- Public-facing assets and their security posture
+- Known CVEs or misconfigurations in identified technologies
+
+**🌐 OSINT FINDINGS**
+- Domain/WHOIS intelligence
+- Subdomain enumeration insights
+- Email patterns and potential phishing vectors
+- Breached credentials or data leak indicators (HaveIBeenPwned-style context)
+- Social engineering risk from LinkedIn/public profiles
+
+**🛡️ VULNERABILITY ASSESSMENT**
+- Critical, High, Medium severity findings ranked
+- CVSS score estimates for each finding
+- Likely exploitation path for the top vulnerability
+
+**🔴 ATTACK SCENARIO SIMULATION**
+- Most realistic attack chain (initial access → lateral movement → objective)
+- Which threat actor profiles (APT groups, ransomware gangs) this target profile matches
+- Estimated time-to-compromise for a skilled attacker
+
+**✅ REMEDIATION ROADMAP**
+- Priority 1 (fix this week): Critical gaps
+- Priority 2 (fix this month): High-risk items
+- Priority 3 (fix this quarter): Hardening and monitoring improvements
+
+**📋 COMPLIANCE & GOVERNANCE**
+- Relevant frameworks: NIST CSF, ISO 27001, SOC 2, PCI-DSS, GDPR
+- Gaps likely to fail an audit
+- Quick wins to improve compliance posture
+
+**🔐 DEFENSIVE RECOMMENDATIONS**
+- Specific tools and controls to implement (SIEM, EDR, WAF, MFA, PAM)
+- Network segmentation and zero-trust architecture guidance
+- Incident response plan highlights
+
+If a screenshot or diagram is uploaded, analyze it for security misconfigurations, exposed credentials, or architectural vulnerabilities.
+Always clarify: assessments are for authorized security testing, defensive purposes, or educational research only.
+Remember our conversation history and build on prior analysis."""
+
 # ── Gold Chart Analyzer system prompt (standalone /chart tool) ─────────────────
 GOLD_CHART_SYSTEM = """You are an expert technical analyst specializing in Gold (XAU/USD) trading.
 When shown a trading chart, you provide a structured, actionable analysis.
@@ -578,6 +625,11 @@ AGENTS = {
         "name": "Beginner Stock Checklist", "emoji": "🎓",
         "system": BEGINNER_SYSTEM,
         "template_hint": "Explain [COMPANY / TICKER] in simple language and give me a beginner checklist.",
+    },
+    "cybersec":       {
+        "name": "Cybersecurity Scanner", "emoji": "🔐",
+        "system": CYBERSEC_SYSTEM,
+        "template_hint": "Scan [domain.com / company / IP] for vulnerabilities and give me a threat intelligence report.",
     },
 }
 
@@ -911,9 +963,10 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
 
 /* ── Input bar ── */
 #input-bar{border-top:1px solid #1f2230;padding:10px 12px;display:flex;align-items:flex-end;gap:8px;flex-shrink:0;background:#111318}
-#attach-wrap{flex-shrink:0;position:relative}
-#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#aaa;border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s;padding:0}
+#attach-wrap{flex-shrink:0}
+#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#aaa;border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s;padding:0;position:relative;overflow:hidden;user-select:none}
 #attach-btn:hover{background:#252a3a;border-color:#f5c518;color:#f5c518}
+#attach-btn input[type="file"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
 #input-center{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
 #img-preview-wrap{display:flex;align-items:center;gap:6px;background:#1a1d2a;border-radius:8px;padding:6px 8px}
 #img-preview{height:48px;width:auto;border-radius:6px;object-fit:cover}
@@ -996,8 +1049,9 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
 
     <div id="input-bar">
       <div id="attach-wrap">
-        <button id="attach-btn" type="button" onclick="document.getElementById('file-input').click()" title="Attach image">📎</button>
-        <input type="file" id="file-input" accept="image/*,image/gif" style="display:none" onchange="onFileSelected(this)"/>
+        <label id="attach-btn" title="Attach image">📎
+          <input type="file" id="file-input" accept="image/*" onchange="onFileSelected(this)"/>
+        </label>
       </div>
       <div id="input-center">
         <div id="img-preview-wrap" style="display:none">
