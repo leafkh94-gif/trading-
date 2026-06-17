@@ -3,10 +3,18 @@ services:
     name: goldscalper-ai
     runtime: python
     plan: free
-    buildCommand: pip install anthropic flask yfinance requests
+    buildCommand: pip install -r requirements.txt
     startCommand: python gold_agent.py
     envVars:
       - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CAPITAL_API_KEY
+        sync: false
+      - key: CAPITAL_PASSWORD
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
         sync: false
       - key: ACCESS_PASSWORD
         value: gold2024
