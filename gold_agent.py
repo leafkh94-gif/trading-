@@ -1,11 +1,11 @@
 """
 Trading AI Hub — Multi-Agent Platform v3 + Gold Chart Analyzer
-15 AI analyst agents with independent conversation histories
-+ Dedicated Gold Chart Analyzer (drag-and-drop, structured XAUUSD analysis)
+16 AI analyst agents with independent conversation histories
++ Capital.com live positions + Dedicated Gold Chart Analyzer
 
-Setup:  pip install anthropic flask yfinance
-Run:    set ANTHROPIC_API_KEY=your_key && python gold_agent.py
-Open:   http://localhost:5000          (15-agent chat hub)
+Setup:  pip install anthropic flask yfinance requests python-dotenv
+Run:    python gold_agent.py   (reads .env automatically)
+Open:   http://localhost:5000          (16-agent chat hub)
         http://localhost:5000/chart    (Gold Chart Analyzer)
 """
 
@@ -15,18 +15,37 @@ from flask import Flask, request, jsonify
 import anthropic
 
 try:
+    from dotenv import load_dotenv
+    import pathlib
+    load_dotenv(dotenv_path=pathlib.Path(__file__).parent / ".env")
+except ImportError:
+    pass
+
+try:
+    import requests as _requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
+try:
     import yfinance as yf
     HAS_YFINANCE = True
 except ImportError:
     HAS_YFINANCE = False
 
-API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+API_KEY          = os.environ.get("ANTHROPIC_API_KEY", "")
+CAPITAL_API_KEY  = os.environ.get("CAPITAL_API_KEY", "")
+CAPITAL_PASSWORD = os.environ.get("CAPITAL_PASSWORD", "")
+CAPITAL_EMAIL    = os.environ.get("CAPITAL_EMAIL", "")
+CAPITAL_BASE     = "https://api-capital.backend-capital.com/api/v1"
 
 # ── Global live data ───────────────────────────────────────────────────────────
-open_trades = []
-tv_alerts   = []
-live_price  = {"price": None, "change": None, "pct": None, "updated": None}
-price_lock  = threading.Lock()
+capital_positions = []
+tv_alerts         = []
+live_price        = {"price": None, "change": None, "pct": None, "updated": None}
+price_lock        = threading.Lock()
+_cap_cst          = None
+_cap_sec          = None
 
 # ── System prompt constants ────────────────────────────────────────────────────
 
@@ -464,6 +483,53 @@ Always end with honest, balanced advice. Encourage questions. Never make beginne
 If a chart image is uploaded, describe what you see in the chart in simple terms the beginner can understand.
 Remember our conversation history and build on prior analysis."""
 
+CYBERSEC_SYSTEM = """You are a Senior Cybersecurity Analyst and Threat Intelligence Specialist with 20+ years of experience across red team operations, digital forensics, OSINT, and enterprise security architecture. You think like an attacker to defend like an expert.
+
+Your role is to deliver comprehensive cybersecurity assessments, threat analyses, OSINT research, and defensive strategy recommendations. You are direct, technical, and solutions-focused — you identify the real vulnerability, not just surface symptoms.
+
+When the user asks about a target, company, domain, or security topic, structure your response as a Cybersecurity Intelligence Report:
+
+**🔍 THREAT SURFACE ANALYSIS**
+- Exposed attack vectors (web, email, API, physical, human)
+- Public-facing assets and their security posture
+- Known CVEs or misconfigurations in identified technologies
+
+**🌐 OSINT FINDINGS**
+- Domain/WHOIS intelligence
+- Subdomain enumeration insights
+- Email patterns and potential phishing vectors
+- Breached credentials or data leak indicators (HaveIBeenPwned-style context)
+- Social engineering risk from LinkedIn/public profiles
+
+**🛡️ VULNERABILITY ASSESSMENT**
+- Critical, High, Medium severity findings ranked
+- CVSS score estimates for each finding
+- Likely exploitation path for the top vulnerability
+
+**🔴 ATTACK SCENARIO SIMULATION**
+- Most realistic attack chain (initial access → lateral movement → objective)
+- Which threat actor profiles (APT groups, ransomware gangs) this target profile matches
+- Estimated time-to-compromise for a skilled attacker
+
+**✅ REMEDIATION ROADMAP**
+- Priority 1 (fix this week): Critical gaps
+- Priority 2 (fix this month): High-risk items
+- Priority 3 (fix this quarter): Hardening and monitoring improvements
+
+**📋 COMPLIANCE & GOVERNANCE**
+- Relevant frameworks: NIST CSF, ISO 27001, SOC 2, PCI-DSS, GDPR
+- Gaps likely to fail an audit
+- Quick wins to improve compliance posture
+
+**🔐 DEFENSIVE RECOMMENDATIONS**
+- Specific tools and controls to implement (SIEM, EDR, WAF, MFA, PAM)
+- Network segmentation and zero-trust architecture guidance
+- Incident response plan highlights
+
+If a screenshot or diagram is uploaded, analyze it for security misconfigurations, exposed credentials, or architectural vulnerabilities.
+Always clarify: assessments are for authorized security testing, defensive purposes, or educational research only.
+Remember our conversation history and build on prior analysis."""
+
 # ── Gold Chart Analyzer system prompt (standalone /chart tool) ─────────────────
 GOLD_CHART_SYSTEM = """You are an expert technical analyst specializing in Gold (XAU/USD) trading.
 When shown a trading chart, you provide a structured, actionable analysis.
@@ -567,6 +633,11 @@ AGENTS = {
         "system": BEGINNER_SYSTEM,
         "template_hint": "Explain [COMPANY / TICKER] in simple language and give me a beginner checklist.",
     },
+    "cybersec":       {
+        "name": "Cybersecurity Scanner", "emoji": "🔐",
+        "system": CYBERSEC_SYSTEM,
+        "template_hint": "Scan [domain.com / company / IP] for vulnerabilities and give me a threat intelligence report.",
+    },
 }
 
 # ── Per-agent state ────────────────────────────────────────────────────────────
@@ -591,6 +662,64 @@ def price_worker():
             except Exception:
                 pass
         time.sleep(30)
+
+# ── Capital.com live positions ─────────────────────────────────────────────────
+def _capital_login():
+    global _cap_cst, _cap_sec
+    if not (CAPITAL_API_KEY and CAPITAL_PASSWORD and CAPITAL_EMAIL):
+        return False
+    try:
+        r = _requests.post(
+            f"{CAPITAL_BASE}/session",
+            headers={"X-CAP-API-KEY": CAPITAL_API_KEY, "Content-Type": "application/json"},
+            json={"identifier": CAPITAL_EMAIL, "password": CAPITAL_PASSWORD, "encryptedPassword": False},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            _cap_cst = r.headers.get("CST")
+            _cap_sec = r.headers.get("X-SECURITY-TOKEN")
+            return True
+        print(f"  Capital.com login failed: {r.status_code} {r.text[:120]}")
+    except Exception as e:
+        print(f"  Capital.com login error: {e}")
+    return False
+
+def _capital_fetch(retry=True):
+    global _cap_cst, _cap_sec
+    if not _cap_cst and not _capital_login():
+        return
+    try:
+        r = _requests.get(
+            f"{CAPITAL_BASE}/positions",
+            headers={"X-CAP-API-KEY": CAPITAL_API_KEY, "CST": _cap_cst, "X-SECURITY-TOKEN": _cap_sec},
+            timeout=10,
+        )
+        if r.status_code == 401:
+            _cap_cst = None
+            if retry and _capital_login():
+                _capital_fetch(retry=False)
+            return
+        if r.status_code == 200:
+            with price_lock:
+                capital_positions.clear()
+                for pos in r.json().get("positions", []):
+                    p = pos.get("position", {})
+                    m = pos.get("market", {})
+                    capital_positions.append({
+                        "symbol":    m.get("instrumentName", m.get("epic", "?")),
+                        "direction": p.get("direction", ""),
+                        "size":      p.get("size", 0),
+                        "open":      p.get("openLevel", 0),
+                        "pnl":       round(p.get("profit", 0), 2),
+                        "currency":  p.get("currency", ""),
+                    })
+    except Exception as e:
+        print(f"  Capital.com positions error: {e}")
+
+def capital_worker():
+    while True:
+        _capital_fetch()
+        time.sleep(15)
 
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -634,15 +763,10 @@ def set_agent():
         "history_len":   len(agent_conversations[agent_id]),
     })
 
-@app.route("/trades", methods=["GET", "POST"])
-def trades_endpoint():
-    if request.method == "POST":
-        data = request.get_json(silent=True) or {}
-        with price_lock:
-            open_trades.clear()
-            open_trades.extend(data.get("trades", []))
-        return jsonify({"status": "ok"})
-    return jsonify({"trades": open_trades})
+@app.route("/positions")
+def positions_endpoint():
+    with price_lock:
+        return jsonify({"positions": list(capital_positions)})
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -723,9 +847,9 @@ def chat():
     ctx = []
     with price_lock:
         if live_price["price"]:
-            ctx.append(f"Live XAUUSD: ${live_price['price']} ({live_price['change']:+.2f} / {live_price['pct']:+.3f}%)")
-    if open_trades:
-        ctx.append("Open MT4 positions:\n" + json.dumps(open_trades, indent=2))
+            ctx.append(f"Live Gold (XAU/USD): ${live_price['price']} ({live_price['change']:+.2f} / {live_price['pct']:+.3f}%)")
+        if capital_positions:
+            ctx.append("Open Capital.com positions:\n" + json.dumps(capital_positions, indent=2))
 
     full_text = ("\n".join(ctx) + "\n\n" + text).strip() if ctx else text
 
@@ -738,6 +862,13 @@ def chat():
                  "image/jpeg" if fname.endswith((".jpg", ".jpeg")) else
                  "image/webp" if fname.endswith(".webp")  else "image/png")
         content.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}})
+        # Strip image bytes from all previous turns to prevent memory growth
+        for msg in conversation:
+            if isinstance(msg["content"], list):
+                for part in msg["content"]:
+                    if part.get("type") == "image" and "source" in part:
+                        part["source"] = {"type": "text", "text": "[earlier chart]"}
+                        part["type"] = "text"
 
     fallback = f"Analyze this chart as a {AGENTS[agent_id]['name']} analyst."
     content.append({"type": "text", "text": full_text or fallback})
@@ -839,15 +970,21 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
 
 /* ── Input bar ── */
 #input-bar{border-top:1px solid #1f2230;padding:10px 12px;display:flex;align-items:flex-end;gap:8px;flex-shrink:0;background:#111318}
-#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#888;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:1rem;flex-shrink:0;transition:border-color .2s}
-#attach-btn:hover{border-color:#f5c518}
-#attach-btn.has-file{border-color:#f5c518;color:#f5c518}
-#file-input{display:none}
-#msg-input{flex:1;background:#0d0f14;border:1px solid #2a2d35;border-radius:8px;color:#e0e0e0;font-size:.88rem;padding:9px 12px;resize:none;height:40px;max-height:120px;font-family:inherit;outline:none;transition:border-color .2s;line-height:1.4}
+#attach-wrap{flex-shrink:0}
+#attach-btn{background:#1e2235;border:1px solid #2a2d35;color:#aaa;border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s;padding:0;position:relative;overflow:hidden;user-select:none}
+#attach-btn:hover{background:#252a3a;border-color:#f5c518;color:#f5c518}
+#attach-btn input[type="file"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+#input-center{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+#img-preview-wrap{display:flex;align-items:center;gap:6px;background:#1a1d2a;border-radius:8px;padding:6px 8px}
+#img-preview{height:48px;width:auto;border-radius:6px;object-fit:cover}
+#img-remove-btn{background:transparent;border:none;color:#888;cursor:pointer;font-size:.85rem;padding:2px 4px;border-radius:4px;flex-shrink:0}
+#img-remove-btn:hover{color:#ef5350}
+#msg-input{width:100%;background:#0d0f14;border:1px solid #2a2d35;border-radius:20px;color:#e0e0e0;font-size:.9rem;padding:10px 16px;resize:none;height:42px;max-height:120px;font-family:inherit;outline:none;transition:border-color .2s;line-height:1.4}
 #msg-input:focus{border-color:#f5c518}
-#msg-input::placeholder{color:#444;font-size:.82rem}
-#send-btn{background:#f5c518;color:#0d0f14;border:none;border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:700;font-size:.9rem;flex-shrink:0;transition:opacity .2s}
-#send-btn:disabled{opacity:.4;cursor:not-allowed}
+#msg-input::placeholder{color:#555;font-size:.85rem}
+#send-btn{background:#f5c518;color:#0d0f14;border:none;border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1.1rem;flex-shrink:0;transition:opacity .2s,transform .1s;display:flex;align-items:center;justify-content:center;padding:0}
+#send-btn:hover{transform:scale(1.08)}
+#send-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
 
 /* ── Right sidebar ── */
 #right-sidebar{width:260px;border-left:1px solid #1f2230;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
@@ -886,9 +1023,9 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
 <body>
 
 <div id="header">
-  <h1 id="header-title">🏆 GoldScalperPro AI</h1>
+  <h1 id="header-title">📊 Trading AI Hub</h1>
   <div id="header-right">
-    <span id="ticker" class="flat">XAUUSD —</span>
+    <span id="ticker" class="flat"></span>
     <a id="chart-scan-btn" href="/chart" target="_blank">📈 Chart Scan</a>
     <button id="clear-btn" onclick="clearChat()">Clear chat</button>
   </div>
@@ -913,25 +1050,34 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
         <span class="welcome-icon">📈</span>
         <strong>Trading AI Hub</strong><br>
         Select an analyst from the left panel, then type your question.<br>
-        <span class="welcome-hint">Attach a chart screenshot for visual analysis · or use <strong>📈 Chart Scan</strong> for a quick Gold read.</span>
+        <span class="welcome-hint">Attach a chart screenshot for visual analysis · or use <strong>📈 Chart Scan</strong> for instant chart analysis.</span>
       </div>
     </div>
 
     <div id="input-bar">
-      <button id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach chart">📎</button>
-      <input type="file" id="file-input" accept="image/*" onchange="onFileSelected(this)"/>
-      <textarea id="msg-input" placeholder="Select an agent to get started…" onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
-      <button id="send-btn" onclick="sendMessage()">▶</button>
+      <div id="attach-wrap">
+        <label id="attach-btn" title="Attach image">📎
+          <input type="file" id="file-input" accept="image/*" onchange="onFileSelected(this)"/>
+        </label>
+      </div>
+      <div id="input-center">
+        <div id="img-preview-wrap" style="display:none">
+          <img id="img-preview" src=""/>
+          <button id="img-remove-btn" onclick="removeFile()" title="Remove">✕</button>
+        </div>
+        <textarea id="msg-input" placeholder="Type a message…" onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
+      </div>
+      <button id="send-btn" onclick="sendMessage()">➤</button>
     </div>
   </div>
 
-  <!-- RIGHT: MT4 + Alerts -->
+  <!-- RIGHT: Capital.com + Alerts -->
   <div id="right-sidebar">
 
     <div class="panel" style="flex:0 0 auto">
-      <div class="panel-header">📊 Open MT4 Trades</div>
+      <div class="panel-header">📊 Capital.com Positions</div>
       <div class="panel-body" id="trades-panel">
-        <div class="no-data">No trades received yet.<br>Run TradeMonitor.mq4 in MT4.</div>
+        <div class="no-data" id="no-positions">Connecting to Capital.com…</div>
       </div>
     </div>
 
@@ -945,7 +1091,9 @@ body{background:#0d0f14;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
     <div id="tv-setup">
       <b style="color:#888">TradingView webhook:</b><br>
       Alert → Notifications → Webhook URL:<br>
-      <code style="color:#f5c518">http://YOUR-IP:5000/webhook</code>
+      <code style="color:#f5c518">http://YOUR-IP:5000/webhook</code><br><br>
+      <b style="color:#888">Capital.com:</b> Set<br>
+      <code style="color:#f5c518">CAPITAL_EMAIL</code> in your .env
     </div>
 
   </div>
@@ -1031,9 +1179,25 @@ function updateHeaderAndHint(agentId){
 
 function onFileSelected(input){
   selectedFile = input.files[0] || null;
-  const btn = document.getElementById('attach-btn');
-  btn.classList.toggle('has-file', !!selectedFile);
-  btn.title = selectedFile ? selectedFile.name : 'Attach chart';
+  const wrap    = document.getElementById('img-preview-wrap');
+  const preview = document.getElementById('img-preview');
+  if(selectedFile){
+    preview.src = URL.createObjectURL(selectedFile);
+    wrap.style.display = 'flex';
+    document.getElementById('attach-btn').style.borderColor = '#f5c518';
+  } else {
+    wrap.style.display = 'none';
+    preview.src = '';
+    document.getElementById('attach-btn').style.borderColor = '';
+  }
+}
+
+function removeFile(){
+  selectedFile = null;
+  document.getElementById('file-input').value = '';
+  document.getElementById('img-preview-wrap').style.display = 'none';
+  document.getElementById('img-preview').src = '';
+  document.getElementById('attach-btn').style.borderColor = '';
 }
 
 function autoResize(el){
@@ -1083,8 +1247,9 @@ async function sendMessage(){
 
   selectedFile = null;
   document.getElementById('file-input').value = '';
-  document.getElementById('attach-btn').classList.remove('has-file');
-  document.getElementById('attach-btn').title = 'Attach chart';
+  document.getElementById('img-preview-wrap').style.display = 'none';
+  document.getElementById('img-preview').src = '';
+  document.getElementById('attach-btn').style.borderColor = '';
 
   try{
     const res  = await fetch('/chat',{method:'POST',body:fd});
@@ -1131,7 +1296,7 @@ async function updatePrice(){
     const el = document.getElementById('ticker');
     if(d.price){
       const sign = d.change >= 0 ? '+' : '';
-      el.textContent = `XAUUSD $${d.price}  ${sign}${d.change} (${sign}${d.pct}%)`;
+      el.textContent = `Gold $${d.price}  ${sign}${d.change} (${sign}${d.pct}%)`;
       el.className   = d.change > 0 ? 'up' : d.change < 0 ? 'down' : 'flat';
     }
   } catch(e){}
@@ -1139,21 +1304,20 @@ async function updatePrice(){
 
 async function updateTrades(){
   try{
-    const d     = await (await fetch('/trades')).json();
+    const d     = await (await fetch('/positions')).json();
     const panel = document.getElementById('trades-panel');
-    if(!d.trades || !d.trades.length){
-      panel.innerHTML = '<div class="no-data">No open trades.<br>Run TradeMonitor.mq4 in MT4.</div>';
+    if(!d.positions || !d.positions.length){
+      panel.innerHTML = '<div class="no-data">No open positions.<br>Set CAPITAL_EMAIL in .env to connect.</div>';
       return;
     }
-    panel.innerHTML = d.trades.map(t => {
+    panel.innerHTML = d.positions.map(t => {
       const pnlClass = t.pnl >= 0 ? 'pos' : 'neg';
       const sign     = t.pnl >= 0 ? '+' : '';
       const dirClass = t.direction === 'BUY' ? 'buy' : 'sell';
       return `<div class="trade-card">
         <div><span class="symbol">${t.symbol}</span><span class="dir ${dirClass}">${t.direction}</span></div>
-        <div class="detail">Lots: ${t.lots} | Open: ${t.open}</div>
-        <div class="detail">SL: ${t.sl||'—'} | TP: ${t.tp||'—'}</div>
-        <div class="pnl ${pnlClass}">${sign}$${t.pnl.toFixed(2)} (${t.pips.toFixed(1)} pts)</div>
+        <div class="detail">Size: ${t.size} | Open: ${t.open}</div>
+        <div class="pnl ${pnlClass}">${sign}${t.pnl} ${t.currency}</div>
       </div>`;
     }).join('');
   } catch(e){}
@@ -1228,7 +1392,7 @@ footer{color:#444;font-size:.78rem;margin-top:16px}
 
 <header>
   <h1>📈 Gold Chart Analyzer</h1>
-  <p>Upload a chart screenshot — get an instant structured XAUUSD analysis</p>
+  <p>Upload a chart screenshot — get an instant structured analysis</p>
 </header>
 
 <div class="card">
@@ -1341,7 +1505,8 @@ resetBtn.addEventListener('click', ()=>{
 });
 
 function renderAnalysis(text){
-  resultBody.innerHTML = text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  const safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  resultBody.innerHTML = safe.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
   resultCard.style.display = 'block';
   resultCard.scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -1354,13 +1519,18 @@ function hideError(){ errorMsg.style.display = 'none'; }
 if __name__ == "__main__":
     if HAS_YFINANCE:
         threading.Thread(target=price_worker, daemon=True).start()
-        print(" Live price feed active (XAUUSD via yfinance)")
+        print(" Live Gold price feed active (XAU/USD via yfinance)")
     else:
-        print(" TIP: Run 'pip install yfinance' to enable live price feed")
+        print(" TIP: pip install yfinance for live Gold price feed")
+
+    if HAS_REQUESTS and CAPITAL_API_KEY and CAPITAL_PASSWORD and CAPITAL_EMAIL:
+        threading.Thread(target=capital_worker, daemon=True).start()
+        print(" Capital.com positions feed active")
+    elif not CAPITAL_EMAIL:
+        print(" TIP: Set CAPITAL_EMAIL in .env to enable Capital.com positions")
 
     print(f"\n Trading AI Hub — {len(AGENTS)} AI Analysts + Gold Chart Analyzer")
     print(" Chat hub    : http://localhost:5000")
     print(" Chart Scan  : http://localhost:5000/chart")
-    print(" Trades      : POST http://localhost:5000/trades  (from TradeMonitor.mq4)")
     print(" Alerts      : POST http://localhost:5000/webhook (from TradingView)\n")
     app.run(host="0.0.0.0", port=5000, debug=False)
