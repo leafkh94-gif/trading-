@@ -16,7 +16,8 @@ import anthropic
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    import pathlib
+    load_dotenv(dotenv_path=pathlib.Path(__file__).parent / ".env")
 except ImportError:
     pass
 
