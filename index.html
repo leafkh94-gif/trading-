@@ -395,18 +395,20 @@ async function send(){
   conversation.push({role:'user', content:content});
   setThinking(true);
 
+  /* use server proxy on Vercel to avoid CORS; direct on GitHub Pages */
+  var onVercel = window.location.hostname.endsWith('.vercel.app') || window.location.hostname==='localhost';
+  var API_URL = onVercel ? '/api/chat' : 'https://api.anthropic.com/v1/messages';
+  var API_HDR = onVercel
+    ? {'x-api-key':antKey,'content-type':'application/json'}
+    : {'x-api-key':antKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-allow-browser':'true'};
+
   /* agentic loop */
   for(var i=0;i<5;i++){
     var body;
     try{
-      var resp = await fetch('https://api.anthropic.com/v1/messages',{
+      var resp = await fetch(API_URL,{
         method:'POST',
-        headers:{
-          'x-api-key':antKey,
-          'anthropic-version':'2023-06-01',
-          'content-type':'application/json',
-          'anthropic-dangerous-allow-browser':'true'
-        },
+        headers:API_HDR,
         body:JSON.stringify({
           model:'claude-sonnet-4-6',
           max_tokens:2048,
@@ -419,7 +421,7 @@ async function send(){
       if(!resp.ok) throw new Error(body.error&&body.error.message ? body.error.message : resp.status+' '+resp.statusText);
     }catch(err){
       setThinking(false);
-      addMsg('bot','⚠ '+err.message);
+      addMsg('bot','⚠ '+err.name+': '+err.message);
       conversation.pop();
       return;
     }
