@@ -508,4 +508,5 @@ if __name__ == "__main__":
         print("  TIP: add CAPITAL_API_KEY / CAPITAL_PASSWORD / CAPITAL_EMAIL to .env for live market data")
 
     print("\n Trading AI ready at http://localhost:5000\n")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
