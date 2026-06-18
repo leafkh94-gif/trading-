@@ -164,8 +164,17 @@ const TOOLS = [{
 
 /* ── Helpers ── */
 function get(id){ return document.getElementById(id); }
-function ls(k){ return localStorage.getItem(k)||''; }
-function lsSet(k,v){ localStorage.setItem(k,v); }
+
+/* localStorage wrapper — falls back to in-memory Map when localStorage
+   is blocked (iOS Safari private mode, file:// restrictions, etc.) */
+const _mem = new Map();
+function ls(k){
+  try{ return localStorage.getItem(k)||''; }catch(e){ return _mem.get(k)||''; }
+}
+function lsSet(k,v){
+  try{ localStorage.setItem(k,v); }catch(e){}
+  _mem.set(k,v);
+}
 
 function renderMd(text){
   return text
@@ -474,17 +483,24 @@ get('settings-btn').addEventListener('click',()=>{
 
 /* ── Setup save ── */
 get('save-btn').addEventListener('click',()=>{
-  const ant=get('s-ant').value.trim();
-  if(!ant){ showSetupErr('Anthropic API key is required.'); return; }
-  lsSet(LS.ant,ant);
-  lsSet(LS.cap,get('s-cap').value.trim());
-  lsSet(LS.email,get('s-email').value.trim());
-  lsSet(LS.pass,get('s-pass').value.trim());
-  capCst=null; capSec=null;
-  get('setup').style.display='none';
-  get('app').style.display='flex';
-  get('setup-err').style.display='none';
-  get('save-btn').textContent='Save & Start';
+  try{
+    /* force blur so iOS autofill commits the value before we read it */
+    ['s-ant','s-cap','s-email','s-pass'].forEach(id=>{ const el=get(id); if(el) el.blur(); });
+
+    const ant=get('s-ant').value.trim();
+    if(!ant){ showSetupErr('Anthropic API key is required. Paste it in the first field.'); return; }
+    lsSet(LS.ant,ant);
+    lsSet(LS.cap,get('s-cap').value.trim());
+    lsSet(LS.email,get('s-email').value.trim());
+    lsSet(LS.pass,get('s-pass').value.trim());
+    capCst=null; capSec=null;
+    get('setup').style.display='none';
+    get('app').style.display='flex';
+    get('setup-err').style.display='none';
+    get('save-btn').textContent='Save & Start';
+  }catch(err){
+    showSetupErr('Error saving: '+err.message+'. Try a different browser.');
+  }
 });
 
 function showSetupErr(msg){
