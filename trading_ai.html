@@ -81,8 +81,27 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 
     <button id="save-btn" onclick="doSave()">Save &amp; Start</button>
     <div id="setup-err"></div>
+    <div id="js-status" style="margin-top:12px;padding:10px;border-radius:8px;background:#1a2a1a;border:1px solid #2a4a2a;font-size:.78rem;color:#6a9a6a;display:none">
+      ✓ JavaScript is active — Save button is ready
+    </div>
   </div>
 </div>
+
+<noscript>
+<div style="position:fixed;inset:0;background:#0d0f14;display:flex;align-items:center;justify-content:center;padding:20px;z-index:9999">
+  <div style="background:#1a1200;border:2px solid #f5c518;border-radius:16px;padding:28px;max-width:380px;text-align:center;font-family:sans-serif">
+    <div style="font-size:2rem;margin-bottom:12px">⚠️</div>
+    <div style="color:#f5c518;font-size:1.1rem;font-weight:700;margin-bottom:10px">JavaScript is not running</div>
+    <div style="color:#ccc;font-size:.88rem;line-height:1.6">
+      This file requires JavaScript. You are viewing it in a file previewer that does not run JavaScript.<br><br>
+      <strong style="color:#f5c518">To fix on iPhone:</strong><br>
+      Open <strong>Safari</strong> → tap the <strong>⬇ download icon</strong> → tap <strong>trading_ai.html</strong><br><br>
+      <strong style="color:#f5c518">To fix on Android:</strong><br>
+      Open in <strong>Chrome</strong> browser, not a file viewer app.
+    </div>
+  </div>
+</div>
+</noscript>
 
 <!-- ── App ── -->
 <div id="app">
@@ -437,6 +456,10 @@ async function send(){
 
 /* ── Init ── */
 (function(){
+  /* show JS-active indicator so user knows JS is working */
+  var jsOk = $('js-status');
+  if(jsOk) jsOk.style.display='block';
+
   if(stor(K.ant)){
     $('setup').style.display='none';
     $('app').style.display='flex';
