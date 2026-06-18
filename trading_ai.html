@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Trading AI</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0f14;color:#e8eaf0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── setup screen ── */
+#setup{display:flex;align-items:center;justify-content:center;flex:1;padding:20px}
+.card{background:#13161f;border:1px solid #2a2d35;border-radius:16px;padding:32px 28px;max-width:420px;width:100%}
+.card h2{color:#f5c518;font-size:1.3rem;margin-bottom:6px}
+.card p{color:#8a8fa8;font-size:.85rem;margin-bottom:20px;line-height:1.5}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:.78rem;color:#8a8fa8;margin-bottom:5px;letter-spacing:.03em}
+.field input{width:100%;background:#0d0f14;border:1px solid #2a2d35;border-radius:8px;color:#e8eaf0;padding:10px 12px;font-size:.9rem;outline:none;transition:border-color .15s}
+.field input:focus{border-color:#f5c518}
+.sep{height:1px;background:#2a2d35;margin:18px 0}
+.sep-label{text-align:center;font-size:.72rem;color:#555;margin-top:-8px;position:relative;top:-1px;background:#13161f;display:inline-block;padding:0 8px;left:50%;transform:translateX(-50%)}
+.btn-primary{width:100%;background:#f5c518;color:#0d0f14;border:none;border-radius:8px;padding:12px;font-size:.95rem;font-weight:700;cursor:pointer;margin-top:6px;transition:opacity .15s}
+.btn-primary:hover{opacity:.88}
+
+/* ── main layout ── */
+#app{display:none;flex-direction:column;flex:1;height:100dvh}
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1e2130;flex-shrink:0}
+.logo{font-size:1.05rem;font-weight:700;color:#f5c518;letter-spacing:.02em}
+.hdr-btns{display:flex;gap:8px}
+.hdr-btn{background:#1a1d2a;border:1px solid #2a2d35;color:#8a8fa8;border-radius:8px;padding:6px 12px;font-size:.78rem;cursor:pointer;transition:border-color .15s}
+.hdr-btn:hover{border-color:#f5c518;color:#e8eaf0}
+
+#msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+#msgs::-webkit-scrollbar{width:4px}
+#msgs::-webkit-scrollbar-track{background:transparent}
+#msgs::-webkit-scrollbar-thumb{background:#2a2d35;border-radius:4px}
+
+.msg{max-width:82%;padding:11px 14px;border-radius:14px;font-size:.9rem;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.msg.user{align-self:flex-end;background:#1e3a5f;border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:#1a1d2a;border:1px solid #2a2d35;border-bottom-left-radius:4px}
+.msg.bot.thinking{color:#8a8fa8;font-style:italic;font-size:.82rem}
+.msg img{max-width:100%;border-radius:8px;margin-top:6px;display:block}
+
+#bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px 14px;border-top:1px solid #1e2130;flex-shrink:0}
+#aw{position:relative;width:40px;height:40px;flex-shrink:0;border-radius:50%;background:#1a1d2a;border:1px solid #2a2d35;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:border-color .15s}
+#aw:hover{border-color:#f5c518}
+#attach-icon{font-size:1.1rem;pointer-events:none;user-select:none;line-height:1}
+#file-input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border-radius:50%}
+#preview-wrap{position:relative;flex-shrink:0}
+#preview{width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid #2a2d35;display:none}
+#rm-btn{position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:#e53e3e;border:none;color:#fff;font-size:.6rem;cursor:pointer;display:none;align-items:center;justify-content:center}
+#ti{flex:1;background:#1a1d2a;border:1px solid #2a2d35;border-radius:12px;color:#e8eaf0;padding:10px 14px;font-size:.92rem;resize:none;outline:none;max-height:120px;overflow-y:auto;transition:border-color .15s;font-family:inherit;line-height:1.4}
+#ti:focus{border-color:#f5c518}
+#ti::placeholder{color:#454860}
+#sb{width:40px;height:40px;flex-shrink:0;border-radius:50%;background:#f5c518;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:opacity .15s;font-size:1.1rem}
+#sb:hover{opacity:.85}
+#sb:disabled{opacity:.4;cursor:not-allowed}
+</style>
+</head>
+<body>
+
+<!-- ── Setup Screen ── -->
+<div id="setup">
+  <div class="card">
+    <h2>📊 Trading AI — Setup</h2>
+    <p>Your credentials are saved on this device only. Never shared or uploaded.</p>
+
+    <div class="field">
+      <label>ANTHROPIC API KEY *</label>
+      <input id="s-ant" type="password" placeholder="sk-ant-api03-…">
+    </div>
+
+    <div style="text-align:center;margin:10px 0 6px">
+      <span style="font-size:.75rem;color:#555">── Capital.com (optional — for live market data) ──</span>
+    </div>
+
+    <div class="field">
+      <label>CAPITAL.COM API KEY</label>
+      <input id="s-cap" type="password" placeholder="jB5JBd…">
+    </div>
+    <div class="field">
+      <label>CAPITAL.COM EMAIL</label>
+      <input id="s-email" type="email" placeholder="you@email.com">
+    </div>
+    <div class="field">
+      <label>CAPITAL.COM PASSWORD</label>
+      <input id="s-pass" type="password" placeholder="password">
+    </div>
+
+    <button class="btn-primary" id="save-btn">Save &amp; Start</button>
+    <p id="setup-err" style="color:#e53e3e;font-size:.8rem;margin-top:10px;display:none"></p>
+  </div>
+</div>
+
+<!-- ── Main App ── -->
+<div id="app">
+  <header>
+    <span class="logo">📊 Trading AI</span>
+    <div class="hdr-btns">
+      <button class="hdr-btn" id="settings-btn">⚙ Keys</button>
+      <button class="hdr-btn" id="clear-btn">🗑 Clear</button>
+    </div>
+  </header>
+
+  <div id="msgs"></div>
+
+  <div id="bar">
+    <div id="aw" title="Attach chart">
+      <div id="attach-icon">📎</div>
+      <input type="file" id="file-input" accept="image/*" capture="environment">
+    </div>
+    <div id="preview-wrap">
+      <img id="preview" alt="preview">
+      <button id="rm-btn" title="Remove">✕</button>
+    </div>
+    <textarea id="ti" rows="1" placeholder="Ask about any market…"></textarea>
+    <button id="sb">➤</button>
+  </div>
+</div>
+
+<script>
+/* ── Storage keys ── */
+const LS = {ant:'tai_ant', cap:'tai_cap', email:'tai_email', pass:'tai_pass'};
+
+/* ── State ── */
+let conversation = [];
+let pendingImage = null; // {base64, mediaType}
+let capCst = null, capSec = null;
+
+/* ── Capital.com endpoints (demo first) ── */
+const CAP_BASES = [
+  'https://demo-api-capital.backend-capital.com/api/v1',
+  'https://api-capital.backend-capital.com/api/v1',
+];
+let capBase = CAP_BASES[0];
+
+/* ── System prompt ── */
+const SYSTEM = `You are an elite professional trading analyst and strategist with deep expertise across all financial markets — forex, commodities (gold, oil, silver), indices (NAS100, S&P 500, FTSE, DAX), stocks, and crypto.
+
+When the user shares a chart image or asks about a market:
+1. Analyze current market structure, trend, momentum, key support/resistance, and chart patterns
+2. Identify confluence zones and high-probability setups
+3. Give a clear directional bias: BUY / SELL / WAIT
+4. Provide specific entry, stop-loss, and take-profit levels with rationale
+5. State your confidence level and note key risks or invalidation conditions
+
+You have access to a live market data tool — use it proactively when asked about current prices, trends, or market conditions for any instrument.
+
+Always be direct, specific, and actionable. No vague disclaimers — give real analysis.`;
+
+/* ── Tool definition ── */
+const TOOLS = [{
+  name: 'get_live_market_data',
+  description: 'Fetch LIVE real-time market data from Capital.com for ANY instrument — forex, gold, oil, indices, stocks, crypto. Call this whenever the user asks about current prices, trends, or live conditions.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      search_term: {type:'string', description:'Instrument name, e.g. "GOLD", "NAS100", "EURUSD", "BTC"'},
+      resolution: {type:'string', enum:['MINUTE','MINUTE_5','MINUTE_15','MINUTE_30','HOUR','HOUR_4','DAY','WEEK'], description:'Candle timeframe (default HOUR)'},
+    },
+    required: ['search_term'],
+  },
+}];
+
+/* ── Helpers ── */
+function get(id){ return document.getElementById(id); }
+function ls(k){ return localStorage.getItem(k)||''; }
+function lsSet(k,v){ localStorage.setItem(k,v); }
+
+function renderMd(text){
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`(.+?)`/g,'<code style="background:#0d0f14;padding:1px 5px;border-radius:4px">$1</code>')
+    .replace(/^#{1,3}\s+(.+)$/gm,'<strong style="color:#f5c518">$1</strong>')
+    .replace(/\n/g,'<br>');
+}
+
+function addMsg(role, html, isHTML=false){
+  const d = document.createElement('div');
+  d.className = 'msg ' + role;
+  if(isHTML) d.innerHTML = html;
+  else d.innerHTML = renderMd(html);
+  get('msgs').appendChild(d);
+  d.scrollIntoView({behavior:'smooth'});
+  return d;
+}
+
+function thinking(on){
+  if(on){
+    const d = addMsg('bot', '⏳ Analyzing…', true);
+    d.classList.add('thinking');
+    d.id = '__thinking__';
+  } else {
+    const t = get('__thinking__');
+    if(t) t.remove();
+  }
+  get('sb').disabled = on;
+}
+
+/* ── Capital.com ── */
+async function capLogin(base){
+  const apiKey = ls(LS.cap), email = ls(LS.email), pass = ls(LS.pass);
+  if(!apiKey||!email||!pass) return false;
+  try{
+    const r = await fetch(base+'/session',{
+      method:'POST',
+      headers:{'X-CAP-API-KEY':apiKey,'Content-Type':'application/json'},
+      body:JSON.stringify({identifier:email,password:pass,encryptedPassword:false}),
+    });
+    if(!r.ok) return false;
+    capCst = r.headers.get('CST');
+    capSec = r.headers.get('X-SECURITY-TOKEN');
+    return !!(capCst && capSec);
+  }catch(e){ return false; }
+}
+
+async function capEnsureAuth(){
+  if(capCst && capSec) return true;
+  for(const base of CAP_BASES){
+    if(await capLogin(base)){ capBase=base; return true; }
+  }
+  return false;
+}
+
+async function capFetch(path, retry=true){
+  const apiKey = ls(LS.cap);
+  if(!apiKey) return null;
+  const headers = {'X-CAP-API-KEY':apiKey,'CST':capCst||'','X-SECURITY-TOKEN':capSec||''};
+  try{
+    const r = await fetch(capBase+path,{headers});
+    if(r.status===401 && retry){
+      capCst=null; capSec=null;
+      if(await capEnsureAuth()) return capFetch(path, false);
+      return null;
+    }
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){ return null; }
+}
+
+function mid(price){
+  if(!price) return null;
+  if(typeof price==='number') return price;
+  const b=price.bid, a=price.ask;
+  if(b!=null&&a!=null) return (b+a)/2;
+  return b||a||null;
+}
+
+async function getLiveMarketData(searchTerm, resolution='HOUR'){
+  const capAvailable = !!(ls(LS.cap)&&ls(LS.email)&&ls(LS.pass));
+  if(!capAvailable) return {error:'Capital.com credentials not configured. Analysis based on AI knowledge only.'};
+
+  if(!capCst||!capSec){
+    const ok = await capEnsureAuth();
+    if(!ok) return {error:'Capital.com login failed. Check your credentials in ⚙ Keys.'};
+  }
+
+  /* search for the epic */
+  const mkt = await capFetch('/markets?searchTerm='+encodeURIComponent(searchTerm)+'&limit=3');
+  if(!mkt||!mkt.markets||!mkt.markets.length) return {error:'Instrument not found: '+searchTerm};
+  const {epic, instrumentName} = mkt.markets[0];
+
+  /* fetch candles */
+  const priceData = await capFetch(`/prices/${epic}?resolution=${resolution}&max=50`);
+  if(!priceData||!priceData.prices) return {error:'Could not fetch price data for '+instrumentName};
+
+  const prices = priceData.prices;
+  const latest = prices[prices.length-1];
+  const oldest = prices[0];
+  const current = mid(latest.closePrice);
+  const open24h = mid(oldest.openPrice);
+  const pct = current&&open24h ? (((current-open24h)/open24h)*100).toFixed(2) : null;
+
+  const candles = prices.map(c=>({
+    t: c.snapshotTime,
+    o: mid(c.openPrice),
+    h: mid(c.highPrice),
+    l: mid(c.lowPrice),
+    c: mid(c.closePrice),
+  }));
+
+  return {
+    instrument: instrumentName,
+    epic,
+    resolution,
+    current_price: current,
+    change_pct: pct ? pct+'%' : 'n/a',
+    candles_count: candles.length,
+    recent_candles: candles.slice(-10),
+  };
+}
+
+/* ── Main agentic loop ── */
+async function runAgentLoop(userContent){
+  const antKey = ls(LS.ant);
+  if(!antKey){ addMsg('bot','⚠ Anthropic API key not set. Tap ⚙ Keys.'); return; }
+
+  conversation.push({role:'user', content: userContent});
+  thinking(true);
+
+  for(let i=0; i<5; i++){
+    let body;
+    try{
+      const resp = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{
+          'x-api-key': antKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+          'anthropic-dangerous-allow-browser': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 2048,
+          system: SYSTEM,
+          tools: TOOLS,
+          messages: historySlice(),
+        }),
+      });
+      body = await resp.json();
+      if(!resp.ok) throw new Error(body.error?.message || resp.statusText);
+    }catch(e){
+      thinking(false);
+      addMsg('bot','⚠ '+e.message);
+      conversation.pop();
+      return;
+    }
+
+    /* build assistant content blocks */
+    const assistantContent = (body.content||[]).map(b=>{
+      if(b.type==='text') return {type:'text',text:b.text};
+      if(b.type==='tool_use') return {type:'tool_use',id:b.id,name:b.name,input:b.input};
+      return b;
+    });
+    conversation.push({role:'assistant',content:assistantContent});
+
+    if(body.stop_reason==='tool_use'){
+      /* execute each tool call */
+      const toolResults = [];
+      for(const block of assistantContent){
+        if(block.type!=='tool_use') continue;
+        const inp = block.input||{};
+        const result = await getLiveMarketData(inp.search_term||'', inp.resolution||'HOUR');
+        toolResults.push({type:'tool_result',tool_use_id:block.id,content:JSON.stringify(result)});
+      }
+      conversation.push({role:'user',content:toolResults});
+      continue; /* next loop */
+    }
+
+    /* end_turn — extract text reply */
+    thinking(false);
+    const reply = assistantContent.filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+    if(reply) addMsg('bot',reply);
+    return;
+  }
+
+  thinking(false);
+  addMsg('bot','⚠ Maximum reasoning iterations reached.');
+}
+
+/* ── History slice (last 20 messages, no orphaned tool_result first) ── */
+function historySlice(){
+  let h = conversation.slice(-20);
+  while(h.length){
+    const first = h[0];
+    const c = first.content;
+    const orphan = Array.isArray(c) && c.some(p=>p&&p.type==='tool_result');
+    if(first.role!=='user'||orphan) h=h.slice(1);
+    else break;
+  }
+  return h;
+}
+
+/* ── Image handling ── */
+function buildUserContent(text, img){
+  if(!img) return text;
+  /* replace previous image blocks in history to save tokens */
+  for(const msg of conversation){
+    if(!Array.isArray(msg.content)) continue;
+    for(let i=0;i<msg.content.length;i++){
+      if(msg.content[i]&&msg.content[i].type==='image')
+        msg.content[i]={type:'text',text:'[earlier chart]'};
+    }
+  }
+  const parts = [{type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}}];
+  if(text.trim()) parts.push({type:'text',text:text.trim()});
+  return parts;
+}
+
+/* ── Send ── */
+async function send(){
+  const text = get('ti').value.trim();
+  if(!text && !pendingImage) return;
+
+  const content = buildUserContent(text, pendingImage);
+
+  /* show user message in UI */
+  const label = pendingImage ? (text||'[chart attached]') : text;
+  const userBubble = addMsg('user','',true);
+  if(pendingImage){
+    const imgEl = document.createElement('img');
+    imgEl.src = 'data:'+pendingImage.mediaType+';base64,'+pendingImage.base64;
+    userBubble.appendChild(imgEl);
+    if(text){ const p=document.createElement('p');p.style.marginTop='6px';p.textContent=text;userBubble.appendChild(p); }
+  } else {
+    userBubble.innerHTML = renderMd(text);
+  }
+
+  get('ti').value='';
+  get('ti').style.height='';
+  clearPreview();
+
+  await runAgentLoop(content);
+}
+
+/* ── Image preview ── */
+function clearPreview(){
+  pendingImage=null;
+  get('preview').style.display='none';
+  get('rm-btn').style.display='none';
+  get('file-input').value='';
+}
+
+get('file-input').addEventListener('change',function(){
+  const f=this.files[0];
+  if(!f) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const dataUrl=e.target.result;
+    const comma=dataUrl.indexOf(',');
+    const base64=dataUrl.slice(comma+1);
+    const mediaType=f.type||'image/jpeg';
+    pendingImage={base64,mediaType};
+    get('preview').src=dataUrl;
+    get('preview').style.display='block';
+    get('rm-btn').style.display='flex';
+  };
+  reader.readAsDataURL(f);
+});
+
+get('rm-btn').addEventListener('click',clearPreview);
+
+get('sb').addEventListener('click',send);
+
+get('ti').addEventListener('keydown',function(e){
+  if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); }
+});
+
+get('ti').addEventListener('input',function(){
+  this.style.height='auto';
+  this.style.height=Math.min(this.scrollHeight,120)+'px';
+});
+
+/* ── Clear conversation ── */
+get('clear-btn').addEventListener('click',()=>{
+  conversation=[];
+  get('msgs').innerHTML='';
+  clearPreview();
+  capCst=null; capSec=null;
+});
+
+/* ── Settings / Key update ── */
+get('settings-btn').addEventListener('click',()=>{
+  get('s-ant').value=ls(LS.ant);
+  get('s-cap').value=ls(LS.cap);
+  get('s-email').value=ls(LS.email);
+  get('s-pass').value=ls(LS.pass);
+  get('app').style.display='none';
+  get('setup').style.display='flex';
+  get('save-btn').textContent='Update & Return';
+});
+
+/* ── Setup save ── */
+get('save-btn').addEventListener('click',()=>{
+  const ant=get('s-ant').value.trim();
+  if(!ant){ showSetupErr('Anthropic API key is required.'); return; }
+  lsSet(LS.ant,ant);
+  lsSet(LS.cap,get('s-cap').value.trim());
+  lsSet(LS.email,get('s-email').value.trim());
+  lsSet(LS.pass,get('s-pass').value.trim());
+  capCst=null; capSec=null;
+  get('setup').style.display='none';
+  get('app').style.display='flex';
+  get('setup-err').style.display='none';
+  get('save-btn').textContent='Save & Start';
+});
+
+function showSetupErr(msg){
+  const e=get('setup-err');
+  e.textContent=msg;
+  e.style.display='block';
+}
+
+/* ── Init ── */
+(function init(){
+  if(ls(LS.ant)){
+    get('setup').style.display='none';
+    get('app').style.display='flex';
+    /* pre-fill Capital.com creds in inputs for easy editing */
+    get('s-ant').value=ls(LS.ant);
+    get('s-cap').value=ls(LS.cap);
+    get('s-email').value=ls(LS.email);
+    get('s-pass').value=ls(LS.pass);
+  }
+})();
+</script>
+</body>
+</html>
