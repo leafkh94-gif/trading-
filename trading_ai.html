@@ -6,99 +6,91 @@
 <title>Trading AI</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#0d0f14;color:#e8eaf0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+html,body{height:100%;background:#0d0f14;color:#e8eaf0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden}
 
-/* ── setup screen ── */
-#setup{display:flex;align-items:center;justify-content:center;flex:1;padding:20px}
-.card{background:#13161f;border:1px solid #2a2d35;border-radius:16px;padding:32px 28px;max-width:420px;width:100%}
-.card h2{color:#f5c518;font-size:1.3rem;margin-bottom:6px}
-.card p{color:#8a8fa8;font-size:.85rem;margin-bottom:20px;line-height:1.5}
-.field{margin-bottom:14px}
-.field label{display:block;font-size:.78rem;color:#8a8fa8;margin-bottom:5px;letter-spacing:.03em}
-.field input{width:100%;background:#0d0f14;border:1px solid #2a2d35;border-radius:8px;color:#e8eaf0;padding:10px 12px;font-size:.9rem;outline:none;transition:border-color .15s}
+/* ── screens ── */
+#setup{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;overflow-y:auto}
+#app{display:none;flex-direction:column;height:100vh;height:100svh}
+
+.card{background:#13161f;border:1px solid #2a2d35;border-radius:16px;padding:28px 22px;max-width:400px;width:100%}
+.card h2{color:#f5c518;font-size:1.2rem;margin-bottom:6px}
+.card p{color:#8a8fa8;font-size:.83rem;margin-bottom:18px;line-height:1.5}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:.76rem;color:#8a8fa8;margin-bottom:4px}
+.field input{width:100%;background:#0d0f14;border:1px solid #2a2d35;border-radius:8px;color:#e8eaf0;padding:11px 12px;font-size:.88rem;outline:none;-webkit-appearance:none}
 .field input:focus{border-color:#f5c518}
-.sep{height:1px;background:#2a2d35;margin:18px 0}
-.sep-label{text-align:center;font-size:.72rem;color:#555;margin-top:-8px;position:relative;top:-1px;background:#13161f;display:inline-block;padding:0 8px;left:50%;transform:translateX(-50%)}
-.btn-primary{width:100%;background:#f5c518;color:#0d0f14;border:none;border-radius:8px;padding:12px;font-size:.95rem;font-weight:700;cursor:pointer;margin-top:6px;transition:opacity .15s}
-.btn-primary:hover{opacity:.88}
+.divlabel{text-align:center;font-size:.72rem;color:#555;margin:12px 0 10px}
+#save-btn{width:100%;background:#f5c518;color:#0d0f14;border:none;border-radius:8px;padding:13px;font-size:.95rem;font-weight:700;cursor:pointer;margin-top:8px;-webkit-appearance:none}
+#setup-err{color:#e53e3e;font-size:.8rem;margin-top:10px;min-height:20px}
 
-/* ── main layout ── */
-#app{display:none;flex-direction:column;flex:1;height:100dvh}
-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1e2130;flex-shrink:0}
-.logo{font-size:1.05rem;font-weight:700;color:#f5c518;letter-spacing:.02em}
+/* ── header ── */
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #1e2130;flex-shrink:0}
+.logo{font-size:1rem;font-weight:700;color:#f5c518}
 .hdr-btns{display:flex;gap:8px}
-.hdr-btn{background:#1a1d2a;border:1px solid #2a2d35;color:#8a8fa8;border-radius:8px;padding:6px 12px;font-size:.78rem;cursor:pointer;transition:border-color .15s}
-.hdr-btn:hover{border-color:#f5c518;color:#e8eaf0}
+.hdr-btn{background:#1a1d2a;border:1px solid #2a2d35;color:#8a8fa8;border-radius:7px;padding:6px 11px;font-size:.77rem;cursor:pointer}
 
-#msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
-#msgs::-webkit-scrollbar{width:4px}
-#msgs::-webkit-scrollbar-track{background:transparent}
-#msgs::-webkit-scrollbar-thumb{background:#2a2d35;border-radius:4px}
-
-.msg{max-width:82%;padding:11px 14px;border-radius:14px;font-size:.9rem;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+/* ── messages ── */
+#msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
+.msg{max-width:84%;padding:11px 13px;border-radius:14px;font-size:.88rem;line-height:1.55;word-break:break-word}
 .msg.user{align-self:flex-end;background:#1e3a5f;border-bottom-right-radius:4px}
 .msg.bot{align-self:flex-start;background:#1a1d2a;border:1px solid #2a2d35;border-bottom-left-radius:4px}
 .msg.bot.thinking{color:#8a8fa8;font-style:italic;font-size:.82rem}
 .msg img{max-width:100%;border-radius:8px;margin-top:6px;display:block}
 
-#bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px 14px;border-top:1px solid #1e2130;flex-shrink:0}
-#aw{position:relative;width:40px;height:40px;flex-shrink:0;border-radius:50%;background:#1a1d2a;border:1px solid #2a2d35;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:border-color .15s}
-#aw:hover{border-color:#f5c518}
-#attach-icon{font-size:1.1rem;pointer-events:none;user-select:none;line-height:1}
-#file-input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border-radius:50%}
+/* ── input bar ── */
+#bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px 16px;border-top:1px solid #1e2130;flex-shrink:0}
+#aw{position:relative;width:40px;height:40px;min-width:40px;border-radius:50%;background:#1a1d2a;border:1px solid #2a2d35;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden}
+#attach-icon{font-size:1.1rem;pointer-events:none;user-select:none}
+#file-input{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer}
 #preview-wrap{position:relative;flex-shrink:0}
 #preview{width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid #2a2d35;display:none}
-#rm-btn{position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:#e53e3e;border:none;color:#fff;font-size:.6rem;cursor:pointer;display:none;align-items:center;justify-content:center}
-#ti{flex:1;background:#1a1d2a;border:1px solid #2a2d35;border-radius:12px;color:#e8eaf0;padding:10px 14px;font-size:.92rem;resize:none;outline:none;max-height:120px;overflow-y:auto;transition:border-color .15s;font-family:inherit;line-height:1.4}
-#ti:focus{border-color:#f5c518}
+#rm-btn{position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:#e53e3e;border:none;color:#fff;font-size:.55rem;cursor:pointer;display:none;align-items:center;justify-content:center;padding:0}
+#ti{flex:1;background:#1a1d2a;border:1px solid #2a2d35;border-radius:12px;color:#e8eaf0;padding:10px 13px;font-size:.92rem;resize:none;outline:none;max-height:120px;overflow-y:auto;font-family:inherit;line-height:1.4;-webkit-appearance:none}
 #ti::placeholder{color:#454860}
-#sb{width:40px;height:40px;flex-shrink:0;border-radius:50%;background:#f5c518;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:opacity .15s;font-size:1.1rem}
-#sb:hover{opacity:.85}
-#sb:disabled{opacity:.4;cursor:not-allowed}
+#sb{width:40px;height:40px;min-width:40px;border-radius:50%;background:#f5c518;border:none;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;-webkit-appearance:none}
+#sb:disabled{opacity:.4}
 </style>
 </head>
 <body>
 
-<!-- ── Setup Screen ── -->
+<!-- ── Setup ── -->
 <div id="setup">
   <div class="card">
     <h2>📊 Trading AI — Setup</h2>
-    <p>Your credentials are saved on this device only. Never shared or uploaded.</p>
+    <p>Enter your keys below. They are saved on this device only and never uploaded anywhere.</p>
 
     <div class="field">
       <label>ANTHROPIC API KEY *</label>
-      <input id="s-ant" type="password" placeholder="sk-ant-api03-…">
+      <input id="s-ant" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-api03-…">
     </div>
 
-    <div style="text-align:center;margin:10px 0 6px">
-      <span style="font-size:.75rem;color:#555">── Capital.com (optional — for live market data) ──</span>
-    </div>
+    <div class="divlabel">── Capital.com (optional — live market data) ──</div>
 
     <div class="field">
       <label>CAPITAL.COM API KEY</label>
-      <input id="s-cap" type="password" placeholder="jB5JBd…">
+      <input id="s-cap" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="jB5JBd…">
     </div>
     <div class="field">
       <label>CAPITAL.COM EMAIL</label>
-      <input id="s-email" type="email" placeholder="you@email.com">
+      <input id="s-email" type="email" autocomplete="off" placeholder="you@email.com">
     </div>
     <div class="field">
       <label>CAPITAL.COM PASSWORD</label>
-      <input id="s-pass" type="password" placeholder="password">
+      <input id="s-pass" type="password" autocomplete="off" placeholder="password">
     </div>
 
-    <button class="btn-primary" id="save-btn">Save &amp; Start</button>
-    <p id="setup-err" style="color:#e53e3e;font-size:.8rem;margin-top:10px;display:none"></p>
+    <button id="save-btn" onclick="doSave()">Save &amp; Start</button>
+    <div id="setup-err"></div>
   </div>
 </div>
 
-<!-- ── Main App ── -->
+<!-- ── App ── -->
 <div id="app">
   <header>
     <span class="logo">📊 Trading AI</span>
     <div class="hdr-btns">
-      <button class="hdr-btn" id="settings-btn">⚙ Keys</button>
-      <button class="hdr-btn" id="clear-btn">🗑 Clear</button>
+      <button class="hdr-btn" onclick="openSetup()">⚙ Keys</button>
+      <button class="hdr-btn" onclick="clearChat()">🗑 Clear</button>
     </div>
   </header>
 
@@ -106,420 +98,353 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 
   <div id="bar">
     <div id="aw" title="Attach chart">
-      <div id="attach-icon">📎</div>
-      <input type="file" id="file-input" accept="image/*" capture="environment">
+      <span id="attach-icon">📎</span>
+      <input type="file" id="file-input" accept="image/*" onchange="onFileChange(this)">
     </div>
     <div id="preview-wrap">
-      <img id="preview" alt="preview">
-      <button id="rm-btn" title="Remove">✕</button>
+      <img id="preview" alt="">
+      <button id="rm-btn" onclick="clearPreview()">✕</button>
     </div>
-    <textarea id="ti" rows="1" placeholder="Ask about any market…"></textarea>
-    <button id="sb">➤</button>
+    <textarea id="ti" rows="1" placeholder="Ask about any market…" onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
+    <button id="sb" onclick="send()">➤</button>
   </div>
 </div>
 
 <script>
-/* ── Storage keys ── */
-const LS = {ant:'tai_ant', cap:'tai_cap', email:'tai_email', pass:'tai_pass'};
+/* ── Storage: localStorage with in-memory fallback ── */
+var _mem = {};
+function stor(k,v){
+  if(v===undefined){
+    try{ return localStorage.getItem(k)||''; }catch(e){ return _mem[k]||''; }
+  }
+  try{ localStorage.setItem(k,v); }catch(e){}
+  _mem[k]=v;
+}
+
+var K = {ant:'t_ant', cap:'t_cap', email:'t_email', pass:'t_pass'};
 
 /* ── State ── */
-let conversation = [];
-let pendingImage = null; // {base64, mediaType}
-let capCst = null, capSec = null;
-
-/* ── Capital.com endpoints (demo first) ── */
-const CAP_BASES = [
+var conversation = [];
+var pendingImg = null;
+var capCst = null, capSec = null, capBase = 'https://demo-api-capital.backend-capital.com/api/v1';
+var CAP_BASES = [
   'https://demo-api-capital.backend-capital.com/api/v1',
-  'https://api-capital.backend-capital.com/api/v1',
+  'https://api-capital.backend-capital.com/api/v1'
 ];
-let capBase = CAP_BASES[0];
 
 /* ── System prompt ── */
-const SYSTEM = `You are an elite professional trading analyst and strategist with deep expertise across all financial markets — forex, commodities (gold, oil, silver), indices (NAS100, S&P 500, FTSE, DAX), stocks, and crypto.
+var SYSTEM = 'You are an elite professional trading analyst with deep expertise across all financial markets — forex, commodities (gold, silver, oil), indices (NAS100, S&P 500, FTSE, DAX), stocks, and crypto.\n\nWhen the user shares a chart image or asks about a market:\n1. Analyze market structure, trend, momentum, key support/resistance levels, and chart patterns\n2. Identify confluence zones and high-probability setups\n3. Give a clear directional bias: BUY / SELL / WAIT\n4. Provide specific entry, stop-loss, and take-profit levels with rationale\n5. State your confidence level and key invalidation conditions\n\nYou have access to a live market data tool — use it proactively whenever the user asks about current prices, live trends, or market conditions for any instrument.\n\nAlways be direct, specific, and actionable. Give real analysis.';
 
-When the user shares a chart image or asks about a market:
-1. Analyze current market structure, trend, momentum, key support/resistance, and chart patterns
-2. Identify confluence zones and high-probability setups
-3. Give a clear directional bias: BUY / SELL / WAIT
-4. Provide specific entry, stop-loss, and take-profit levels with rationale
-5. State your confidence level and note key risks or invalidation conditions
-
-You have access to a live market data tool — use it proactively when asked about current prices, trends, or market conditions for any instrument.
-
-Always be direct, specific, and actionable. No vague disclaimers — give real analysis.`;
-
-/* ── Tool definition ── */
-const TOOLS = [{
+/* ── Tool ── */
+var TOOLS = [{
   name: 'get_live_market_data',
-  description: 'Fetch LIVE real-time market data from Capital.com for ANY instrument — forex, gold, oil, indices, stocks, crypto. Call this whenever the user asks about current prices, trends, or live conditions.',
+  description: 'Fetch LIVE real-time market data from Capital.com for any instrument — forex, gold, oil, indices, stocks, crypto. Call this whenever the user asks about current prices, trends, or live market conditions.',
   input_schema: {
     type: 'object',
     properties: {
-      search_term: {type:'string', description:'Instrument name, e.g. "GOLD", "NAS100", "EURUSD", "BTC"'},
-      resolution: {type:'string', enum:['MINUTE','MINUTE_5','MINUTE_15','MINUTE_30','HOUR','HOUR_4','DAY','WEEK'], description:'Candle timeframe (default HOUR)'},
+      search_term: {type:'string', description:'Instrument name e.g. "GOLD", "NAS100", "EURUSD", "BTC"'},
+      resolution: {type:'string', enum:['MINUTE','MINUTE_5','MINUTE_15','MINUTE_30','HOUR','HOUR_4','DAY','WEEK'], description:'Candle resolution (default HOUR)'}
     },
-    required: ['search_term'],
-  },
+    required: ['search_term']
+  }
 }];
 
-/* ── Helpers ── */
-function get(id){ return document.getElementById(id); }
+/* ── DOM helpers ── */
+function $(id){ return document.getElementById(id); }
 
-/* localStorage wrapper — falls back to in-memory Map when localStorage
-   is blocked (iOS Safari private mode, file:// restrictions, etc.) */
-const _mem = new Map();
-function ls(k){
-  try{ return localStorage.getItem(k)||''; }catch(e){ return _mem.get(k)||''; }
-}
-function lsSet(k,v){
-  try{ localStorage.setItem(k,v); }catch(e){}
-  _mem.set(k,v);
+function showErr(msg){
+  $('setup-err').textContent = msg;
+  $('setup-err').style.color = '#e53e3e';
 }
 
-function renderMd(text){
-  return text
+function autoResize(el){
+  el.style.height='auto';
+  el.style.height = Math.min(el.scrollHeight, 120)+'px';
+}
+
+function onKey(e){
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+}
+
+/* ── Setup ── */
+function doSave(){
+  var ant = $('s-ant').value.replace(/\s/g,'');
+  if(!ant){
+    showErr('Anthropic API key is required.');
+    return;
+  }
+  stor(K.ant, ant);
+  stor(K.cap,   $('s-cap').value.replace(/\s/g,''));
+  stor(K.email, $('s-email').value.trim());
+  stor(K.pass,  $('s-pass').value);
+  capCst = null; capSec = null;
+  $('setup').style.display = 'none';
+  $('app').style.display = 'flex';
+}
+
+function openSetup(){
+  $('s-ant').value   = stor(K.ant);
+  $('s-cap').value   = stor(K.cap);
+  $('s-email').value = stor(K.email);
+  $('s-pass').value  = stor(K.pass);
+  $('app').style.display   = 'none';
+  $('setup').style.display = 'flex';
+  $('save-btn').textContent = 'Update & Return';
+}
+
+/* ── Clear ── */
+function clearChat(){
+  conversation = [];
+  $('msgs').innerHTML = '';
+  clearPreview();
+  capCst = null; capSec = null;
+}
+
+/* ── Image ── */
+function onFileChange(input){
+  var f = input.files[0];
+  if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var data = e.target.result;
+    var comma = data.indexOf(',');
+    pendingImg = {base64: data.slice(comma+1), mediaType: f.type||'image/jpeg'};
+    $('preview').src = data;
+    $('preview').style.display = 'block';
+    $('rm-btn').style.display = 'flex';
+  };
+  reader.readAsDataURL(f);
+}
+
+function clearPreview(){
+  pendingImg = null;
+  $('preview').style.display = 'none';
+  $('rm-btn').style.display = 'none';
+  $('file-input').value = '';
+}
+
+/* ── Messages ── */
+function addMsg(role, text, isHTML){
+  var d = document.createElement('div');
+  d.className = 'msg '+role;
+  if(isHTML) d.innerHTML = text;
+  else d.innerHTML = md(text);
+  $('msgs').appendChild(d);
+  d.scrollIntoView({behavior:'smooth',block:'end'});
+  return d;
+}
+
+function md(t){
+  return t
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
     .replace(/\*(.+?)\*/g,'<em>$1</em>')
-    .replace(/`(.+?)`/g,'<code style="background:#0d0f14;padding:1px 5px;border-radius:4px">$1</code>')
+    .replace(/`(.+?)`/g,'<code style="background:#0d0f14;padding:1px 5px;border-radius:3px">$1</code>')
     .replace(/^#{1,3}\s+(.+)$/gm,'<strong style="color:#f5c518">$1</strong>')
     .replace(/\n/g,'<br>');
 }
 
-function addMsg(role, html, isHTML=false){
-  const d = document.createElement('div');
-  d.className = 'msg ' + role;
-  if(isHTML) d.innerHTML = html;
-  else d.innerHTML = renderMd(html);
-  get('msgs').appendChild(d);
-  d.scrollIntoView({behavior:'smooth'});
-  return d;
-}
-
-function thinking(on){
+function setThinking(on){
   if(on){
-    const d = addMsg('bot', '⏳ Analyzing…', true);
+    var d = addMsg('bot','⏳ Thinking…',true);
     d.classList.add('thinking');
-    d.id = '__thinking__';
+    d.id = '_think';
   } else {
-    const t = get('__thinking__');
+    var t = $('_think');
     if(t) t.remove();
   }
-  get('sb').disabled = on;
+  $('sb').disabled = on;
 }
 
 /* ── Capital.com ── */
 async function capLogin(base){
-  const apiKey = ls(LS.cap), email = ls(LS.email), pass = ls(LS.pass);
+  var apiKey=stor(K.cap), email=stor(K.email), pass=stor(K.pass);
   if(!apiKey||!email||!pass) return false;
   try{
-    const r = await fetch(base+'/session',{
+    var r = await fetch(base+'/session',{
       method:'POST',
       headers:{'X-CAP-API-KEY':apiKey,'Content-Type':'application/json'},
-      body:JSON.stringify({identifier:email,password:pass,encryptedPassword:false}),
+      body:JSON.stringify({identifier:email,password:pass,encryptedPassword:false})
     });
     if(!r.ok) return false;
     capCst = r.headers.get('CST');
     capSec = r.headers.get('X-SECURITY-TOKEN');
-    return !!(capCst && capSec);
+    return !!(capCst&&capSec);
   }catch(e){ return false; }
 }
 
-async function capEnsureAuth(){
-  if(capCst && capSec) return true;
-  for(const base of CAP_BASES){
-    if(await capLogin(base)){ capBase=base; return true; }
+async function capAuth(){
+  if(capCst&&capSec) return true;
+  for(var i=0;i<CAP_BASES.length;i++){
+    if(await capLogin(CAP_BASES[i])){ capBase=CAP_BASES[i]; return true; }
   }
   return false;
 }
 
-async function capFetch(path, retry=true){
-  const apiKey = ls(LS.cap);
-  if(!apiKey) return null;
-  const headers = {'X-CAP-API-KEY':apiKey,'CST':capCst||'','X-SECURITY-TOKEN':capSec||''};
+async function capGet(path, retry){
+  var key=stor(K.cap);
+  if(!key) return null;
   try{
-    const r = await fetch(capBase+path,{headers});
-    if(r.status===401 && retry){
-      capCst=null; capSec=null;
-      if(await capEnsureAuth()) return capFetch(path, false);
-      return null;
-    }
+    var r = await fetch(capBase+path,{
+      headers:{'X-CAP-API-KEY':key,'CST':capCst||'','X-SECURITY-TOKEN':capSec||''}
+    });
+    if(r.status===401&&retry!==false){ capCst=null;capSec=null; if(await capAuth()) return capGet(path,false); return null; }
     if(!r.ok) return null;
     return await r.json();
   }catch(e){ return null; }
 }
 
-function mid(price){
-  if(!price) return null;
-  if(typeof price==='number') return price;
-  const b=price.bid, a=price.ask;
+function mid(p){
+  if(!p) return null;
+  if(typeof p==='number') return p;
+  var b=p.bid,a=p.ask;
   if(b!=null&&a!=null) return (b+a)/2;
   return b||a||null;
 }
 
-async function getLiveMarketData(searchTerm, resolution='HOUR'){
-  const capAvailable = !!(ls(LS.cap)&&ls(LS.email)&&ls(LS.pass));
-  if(!capAvailable) return {error:'Capital.com credentials not configured. Analysis based on AI knowledge only.'};
-
-  if(!capCst||!capSec){
-    const ok = await capEnsureAuth();
-    if(!ok) return {error:'Capital.com login failed. Check your credentials in ⚙ Keys.'};
-  }
-
-  /* search for the epic */
-  const mkt = await capFetch('/markets?searchTerm='+encodeURIComponent(searchTerm)+'&limit=3');
-  if(!mkt||!mkt.markets||!mkt.markets.length) return {error:'Instrument not found: '+searchTerm};
-  const {epic, instrumentName} = mkt.markets[0];
-
-  /* fetch candles */
-  const priceData = await capFetch(`/prices/${epic}?resolution=${resolution}&max=50`);
-  if(!priceData||!priceData.prices) return {error:'Could not fetch price data for '+instrumentName};
-
-  const prices = priceData.prices;
-  const latest = prices[prices.length-1];
-  const oldest = prices[0];
-  const current = mid(latest.closePrice);
-  const open24h = mid(oldest.openPrice);
-  const pct = current&&open24h ? (((current-open24h)/open24h)*100).toFixed(2) : null;
-
-  const candles = prices.map(c=>({
-    t: c.snapshotTime,
-    o: mid(c.openPrice),
-    h: mid(c.highPrice),
-    l: mid(c.lowPrice),
-    c: mid(c.closePrice),
-  }));
-
+async function getLiveData(term, res){
+  res = res||'HOUR';
+  if(!stor(K.cap)||!stor(K.email)||!stor(K.pass))
+    return {error:'Capital.com credentials not set. Tap ⚙ Keys to add them.'};
+  if(!capCst||!capSec){ if(!await capAuth()) return {error:'Capital.com login failed. Check your credentials in ⚙ Keys.'}; }
+  var mkt = await capGet('/markets?searchTerm='+encodeURIComponent(term)+'&limit=3');
+  if(!mkt||!mkt.markets||!mkt.markets.length) return {error:'Instrument not found: '+term};
+  var epic=mkt.markets[0].epic, name=mkt.markets[0].instrumentName;
+  var pd = await capGet('/prices/'+epic+'?resolution='+res+'&max=50');
+  if(!pd||!pd.prices) return {error:'No price data for '+name};
+  var prices=pd.prices, last=prices[prices.length-1], first=prices[0];
+  var cur=mid(last.closePrice), open=mid(first.openPrice);
+  var pct = (cur&&open) ? (((cur-open)/open)*100).toFixed(2)+'%' : 'n/a';
   return {
-    instrument: instrumentName,
-    epic,
-    resolution,
-    current_price: current,
-    change_pct: pct ? pct+'%' : 'n/a',
-    candles_count: candles.length,
-    recent_candles: candles.slice(-10),
+    instrument:name, epic:epic, resolution:res,
+    current_price:cur, change:pct,
+    recent_candles: prices.slice(-10).map(function(c){
+      return {t:c.snapshotTime,o:mid(c.openPrice),h:mid(c.highPrice),l:mid(c.lowPrice),c:mid(c.closePrice)};
+    })
   };
 }
 
-/* ── Main agentic loop ── */
-async function runAgentLoop(userContent){
-  const antKey = ls(LS.ant);
-  if(!antKey){ addMsg('bot','⚠ Anthropic API key not set. Tap ⚙ Keys.'); return; }
-
-  conversation.push({role:'user', content: userContent});
-  thinking(true);
-
-  for(let i=0; i<5; i++){
-    let body;
-    try{
-      const resp = await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{
-          'x-api-key': antKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-          'anthropic-dangerous-allow-browser': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 2048,
-          system: SYSTEM,
-          tools: TOOLS,
-          messages: historySlice(),
-        }),
-      });
-      body = await resp.json();
-      if(!resp.ok) throw new Error(body.error?.message || resp.statusText);
-    }catch(e){
-      thinking(false);
-      addMsg('bot','⚠ '+e.message);
-      conversation.pop();
-      return;
-    }
-
-    /* build assistant content blocks */
-    const assistantContent = (body.content||[]).map(b=>{
-      if(b.type==='text') return {type:'text',text:b.text};
-      if(b.type==='tool_use') return {type:'tool_use',id:b.id,name:b.name,input:b.input};
-      return b;
-    });
-    conversation.push({role:'assistant',content:assistantContent});
-
-    if(body.stop_reason==='tool_use'){
-      /* execute each tool call */
-      const toolResults = [];
-      for(const block of assistantContent){
-        if(block.type!=='tool_use') continue;
-        const inp = block.input||{};
-        const result = await getLiveMarketData(inp.search_term||'', inp.resolution||'HOUR');
-        toolResults.push({type:'tool_result',tool_use_id:block.id,content:JSON.stringify(result)});
-      }
-      conversation.push({role:'user',content:toolResults});
-      continue; /* next loop */
-    }
-
-    /* end_turn — extract text reply */
-    thinking(false);
-    const reply = assistantContent.filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
-    if(reply) addMsg('bot',reply);
-    return;
-  }
-
-  thinking(false);
-  addMsg('bot','⚠ Maximum reasoning iterations reached.');
-}
-
-/* ── History slice (last 20 messages, no orphaned tool_result first) ── */
-function historySlice(){
-  let h = conversation.slice(-20);
+/* ── History slice ── */
+function history(){
+  var h = conversation.slice(-20);
   while(h.length){
-    const first = h[0];
-    const c = first.content;
-    const orphan = Array.isArray(c) && c.some(p=>p&&p.type==='tool_result');
-    if(first.role!=='user'||orphan) h=h.slice(1);
-    else break;
+    var f=h[0], c=f.content;
+    var orphan = Array.isArray(c) && c.some(function(p){ return p&&p.type==='tool_result'; });
+    if(f.role!=='user'||orphan) h=h.slice(1); else break;
   }
   return h;
 }
 
-/* ── Image handling ── */
-function buildUserContent(text, img){
-  if(!img) return text;
-  /* replace previous image blocks in history to save tokens */
-  for(const msg of conversation){
-    if(!Array.isArray(msg.content)) continue;
-    for(let i=0;i<msg.content.length;i++){
-      if(msg.content[i]&&msg.content[i].type==='image')
-        msg.content[i]={type:'text',text:'[earlier chart]'};
-    }
-  }
-  const parts = [{type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}}];
-  if(text.trim()) parts.push({type:'text',text:text.trim()});
-  return parts;
-}
-
-/* ── Send ── */
+/* ── Main send ── */
 async function send(){
-  const text = get('ti').value.trim();
-  if(!text && !pendingImage) return;
+  var text = $('ti').value.trim();
+  if(!text&&!pendingImg) return;
 
-  const content = buildUserContent(text, pendingImage);
+  var antKey = stor(K.ant);
+  if(!antKey){ addMsg('bot','⚠ Anthropic API key not set. Tap ⚙ Keys.'); return; }
 
-  /* show user message in UI */
-  const label = pendingImage ? (text||'[chart attached]') : text;
-  const userBubble = addMsg('user','',true);
-  if(pendingImage){
-    const imgEl = document.createElement('img');
-    imgEl.src = 'data:'+pendingImage.mediaType+';base64,'+pendingImage.base64;
-    userBubble.appendChild(imgEl);
-    if(text){ const p=document.createElement('p');p.style.marginTop='6px';p.textContent=text;userBubble.appendChild(p); }
+  /* build content */
+  var content;
+  if(pendingImg){
+    /* replace older images in history to save tokens */
+    conversation.forEach(function(m){
+      if(!Array.isArray(m.content)) return;
+      m.content.forEach(function(b,i){
+        if(b&&b.type==='image') m.content[i]={type:'text',text:'[earlier chart]'};
+      });
+    });
+    content = [{type:'image',source:{type:'base64',media_type:pendingImg.mediaType,data:pendingImg.base64}}];
+    if(text) content.push({type:'text',text:text});
   } else {
-    userBubble.innerHTML = renderMd(text);
+    content = text;
   }
 
-  get('ti').value='';
-  get('ti').style.height='';
-  clearPreview();
-
-  await runAgentLoop(content);
-}
-
-/* ── Image preview ── */
-function clearPreview(){
-  pendingImage=null;
-  get('preview').style.display='none';
-  get('rm-btn').style.display='none';
-  get('file-input').value='';
-}
-
-get('file-input').addEventListener('change',function(){
-  const f=this.files[0];
-  if(!f) return;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    const dataUrl=e.target.result;
-    const comma=dataUrl.indexOf(',');
-    const base64=dataUrl.slice(comma+1);
-    const mediaType=f.type||'image/jpeg';
-    pendingImage={base64,mediaType};
-    get('preview').src=dataUrl;
-    get('preview').style.display='block';
-    get('rm-btn').style.display='flex';
-  };
-  reader.readAsDataURL(f);
-});
-
-get('rm-btn').addEventListener('click',clearPreview);
-
-get('sb').addEventListener('click',send);
-
-get('ti').addEventListener('keydown',function(e){
-  if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); }
-});
-
-get('ti').addEventListener('input',function(){
-  this.style.height='auto';
-  this.style.height=Math.min(this.scrollHeight,120)+'px';
-});
-
-/* ── Clear conversation ── */
-get('clear-btn').addEventListener('click',()=>{
-  conversation=[];
-  get('msgs').innerHTML='';
-  clearPreview();
-  capCst=null; capSec=null;
-});
-
-/* ── Settings / Key update ── */
-get('settings-btn').addEventListener('click',()=>{
-  get('s-ant').value=ls(LS.ant);
-  get('s-cap').value=ls(LS.cap);
-  get('s-email').value=ls(LS.email);
-  get('s-pass').value=ls(LS.pass);
-  get('app').style.display='none';
-  get('setup').style.display='flex';
-  get('save-btn').textContent='Update & Return';
-});
-
-/* ── Setup save ── */
-get('save-btn').addEventListener('click',()=>{
-  try{
-    /* force blur so iOS autofill commits the value before we read it */
-    ['s-ant','s-cap','s-email','s-pass'].forEach(id=>{ const el=get(id); if(el) el.blur(); });
-
-    const ant=get('s-ant').value.trim();
-    if(!ant){ showSetupErr('Anthropic API key is required. Paste it in the first field.'); return; }
-    lsSet(LS.ant,ant);
-    lsSet(LS.cap,get('s-cap').value.trim());
-    lsSet(LS.email,get('s-email').value.trim());
-    lsSet(LS.pass,get('s-pass').value.trim());
-    capCst=null; capSec=null;
-    get('setup').style.display='none';
-    get('app').style.display='flex';
-    get('setup-err').style.display='none';
-    get('save-btn').textContent='Save & Start';
-  }catch(err){
-    showSetupErr('Error saving: '+err.message+'. Try a different browser.');
+  /* show user bubble */
+  var bubble = addMsg('user','',true);
+  if(pendingImg){
+    var img=document.createElement('img');
+    img.src='data:'+pendingImg.mediaType+';base64,'+pendingImg.base64;
+    bubble.appendChild(img);
+    if(text){ var p=document.createElement('p');p.style.marginTop='6px';p.textContent=text;bubble.appendChild(p); }
+  } else {
+    bubble.innerHTML = md(text);
   }
-});
 
-function showSetupErr(msg){
-  const e=get('setup-err');
-  e.textContent=msg;
-  e.style.display='block';
+  $('ti').value=''; $('ti').style.height='';
+  clearPreview();
+
+  conversation.push({role:'user', content:content});
+  setThinking(true);
+
+  /* agentic loop */
+  for(var i=0;i<5;i++){
+    var body;
+    try{
+      var resp = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{
+          'x-api-key':antKey,
+          'anthropic-version':'2023-06-01',
+          'content-type':'application/json',
+          'anthropic-dangerous-allow-browser':'true'
+        },
+        body:JSON.stringify({
+          model:'claude-sonnet-4-6',
+          max_tokens:2048,
+          system:SYSTEM,
+          tools:TOOLS,
+          messages:history()
+        })
+      });
+      body = await resp.json();
+      if(!resp.ok) throw new Error(body.error&&body.error.message ? body.error.message : resp.status+' '+resp.statusText);
+    }catch(err){
+      setThinking(false);
+      addMsg('bot','⚠ '+err.message);
+      conversation.pop();
+      return;
+    }
+
+    var ac = (body.content||[]).map(function(b){
+      if(b.type==='text') return {type:'text',text:b.text};
+      if(b.type==='tool_use') return {type:'tool_use',id:b.id,name:b.name,input:b.input};
+      return b;
+    });
+    conversation.push({role:'assistant',content:ac});
+
+    if(body.stop_reason==='tool_use'){
+      var results=[];
+      for(var j=0;j<ac.length;j++){
+        if(ac[j].type!=='tool_use') continue;
+        var inp=ac[j].input||{};
+        var r = await getLiveData(inp.search_term||'', inp.resolution||'HOUR');
+        results.push({type:'tool_result',tool_use_id:ac[j].id,content:JSON.stringify(r)});
+      }
+      conversation.push({role:'user',content:results});
+      continue;
+    }
+
+    /* done */
+    setThinking(false);
+    var reply = ac.filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n').trim();
+    if(reply) addMsg('bot',reply);
+    return;
+  }
+
+  setThinking(false);
+  addMsg('bot','⚠ Maximum iterations reached.');
 }
 
 /* ── Init ── */
-(function init(){
-  if(ls(LS.ant)){
-    get('setup').style.display='none';
-    get('app').style.display='flex';
-    /* pre-fill Capital.com creds in inputs for easy editing */
-    get('s-ant').value=ls(LS.ant);
-    get('s-cap').value=ls(LS.cap);
-    get('s-email').value=ls(LS.email);
-    get('s-pass').value=ls(LS.pass);
+(function(){
+  if(stor(K.ant)){
+    $('setup').style.display='none';
+    $('app').style.display='flex';
   }
+  $('s-ant').value   = stor(K.ant);
+  $('s-cap').value   = stor(K.cap);
+  $('s-email').value = stor(K.email);
+  $('s-pass').value  = stor(K.pass);
 })();
 </script>
 </body>
