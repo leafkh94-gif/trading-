@@ -9,11 +9,27 @@ import base64, os, pathlib
 from flask import Flask, request, jsonify
 import anthropic
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv(dotenv_path=pathlib.Path(__file__).parent / ".env")
-except ImportError:
-    pass
+# ── Load .env from the same folder as this script ─────────────────────────────
+# Built-in parser: handles UTF-8 BOM (PowerShell Out-File adds one) and quotes.
+# No external library needed.
+def _load_env():
+    env_path = pathlib.Path(__file__).parent / ".env"
+    if not env_path.exists():
+        return
+    try:
+        for line in env_path.read_text(encoding="utf-8-sig").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip().lstrip("﻿")
+            val = val.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+    except Exception as e:
+        print(f"  Could not read .env: {e}")
+
+_load_env()
 
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
