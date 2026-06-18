@@ -5,7 +5,7 @@ Run:  python gold_agent.py
 Open: http://localhost:5000
 """
 
-import base64, os, json, threading, time, pathlib
+import base64, os, pathlib
 from flask import Flask, request, jsonify
 import anthropic
 
@@ -15,16 +15,8 @@ try:
 except ImportError:
     pass
 
-try:
-    import yfinance as yf
-    HAS_YF = True
-except ImportError:
-    HAS_YF = False
-
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
-live_price   = {"price": None, "change": None, "pct": None}
-price_lock   = threading.Lock()
 conversation = []
 
 SYSTEM = """You are a professional trading analyst. You cover every market — Gold, NAS100, SP500, DOW, forex, stocks, crypto — any instrument the user mentions.
@@ -45,35 +37,12 @@ When the user asks a text question about any trade or market:
 You remember the full conversation. Build on prior context. Ask for the ticker or timeframe if it helps."""
 
 
-def price_worker():
-    while True:
-        if HAS_YF:
-            try:
-                h = yf.Ticker("GC=F").history(period="2d", interval="1m")
-                if not h.empty:
-                    p   = round(float(h["Close"].iloc[-1]), 2)
-                    p0  = round(float(h["Close"].iloc[-2]), 2)
-                    chg = round(p - p0, 2)
-                    pct = round(chg / p0 * 100, 3) if p0 else 0
-                    with price_lock:
-                        live_price.update(price=p, change=chg, pct=pct)
-            except Exception:
-                pass
-        time.sleep(30)
-
-
 app = Flask(__name__)
 
 
 @app.route("/")
 def index():
     return HTML
-
-
-@app.route("/price")
-def get_price():
-    with price_lock:
-        return jsonify(live_price)
 
 
 @app.route("/clear", methods=["POST"])
@@ -112,10 +81,7 @@ def chat():
                         p.clear()
                         p.update({"type": "text", "text": "[earlier chart]"})
 
-    with price_lock:
-        gold = f"[Live Gold: ${live_price['price']}] " if live_price["price"] else ""
-
-    content.append({"type": "text", "text": gold + text if text else (gold + "Analyze this chart.") if gold else "Analyze this chart."})
+    content.append({"type": "text", "text": text if text else "Analyze this chart and give me a clear recommendation."})
     conversation.append({"role": "user", "content": content})
 
     try:
@@ -148,9 +114,6 @@ body{display:flex;flex-direction:column}
 /* Header */
 #hdr{background:#111318;border-bottom:1px solid #1e2130;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 #hdr h1{font-size:.95rem;color:#f5c518;font-weight:700;letter-spacing:.4px}
-#hdr-right{display:flex;align-items:center;gap:10px}
-#ticker{font-size:.85rem;font-weight:600;color:#888}
-#ticker.up{color:#26a69a}#ticker.down{color:#ef5350}
 #clear-btn{background:transparent;border:1px solid #2a2d35;color:#777;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:.75rem}
 #clear-btn:hover{border-color:#f5c518;color:#f5c518}
 
@@ -197,16 +160,13 @@ body{display:flex;flex-direction:column}
 
 <div id="hdr">
   <h1>📊 Trading AI</h1>
-  <div id="hdr-right">
-    <span id="ticker">—</span>
-    <button id="clear-btn">Clear</button>
-  </div>
+  <button id="clear-btn">Clear</button>
 </div>
 
 <div id="messages">
   <div class="hint">
     <b>Ask anything. Attach any chart.</b><br>
-    Gold · NAS100 · SP500 · Forex · Stocks · Crypto<br><br>
+    Any market · Any instrument · Any timeframe<br><br>
     Type a question <em>or</em> tap 📎 to attach a chart screenshot.<br>
     The AI will analyse it and give you a clear recommendation.
   </div>
@@ -340,20 +300,6 @@ function fmt(s){
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/\*\*(.+?)\*\*/gs,'<strong>$1</strong>');
 }
-
-// ── Live Gold price ───────────────────────────────────────────────────────────
-async function tick(){
-  try{
-    var d  = await (await fetch('/price')).json();
-    var el = document.getElementById('ticker');
-    if(d.price){
-      var s = d.change >= 0 ? '+' : '';
-      el.textContent = 'Gold $' + d.price + '  ' + s + d.change;
-      el.className   = d.change > 0 ? 'up' : d.change < 0 ? 'down' : '';
-    }
-  }catch(e){}
-}
-tick(); setInterval(tick, 30000);
 </script>
 </body>
 </html>"""
@@ -364,10 +310,6 @@ if __name__ == "__main__":
         print("\n  ⚠  ANTHROPIC_API_KEY not set!")
         print("     Stop this server and run:")
         print('     $env:ANTHROPIC_API_KEY="sk-ant-..." ; python gold_agent.py\n')
-
-    if HAS_YF:
-        threading.Thread(target=price_worker, daemon=True).start()
-        print(" Live Gold price active")
 
     print("\n Trading AI ready at http://localhost:5000\n")
     app.run(host="0.0.0.0", port=5000, debug=False)
