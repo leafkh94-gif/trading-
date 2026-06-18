@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Trading AI</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#0d0f14;color:#e8eaf0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden}
+
+/* ── screens ── */
+#setup{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;overflow-y:auto}
+#app{display:none;flex-direction:column;height:100vh;height:100svh}
+
+.card{background:#13161f;border:1px solid #2a2d35;border-radius:16px;padding:28px 22px;max-width:400px;width:100%}
+.card h2{color:#f5c518;font-size:1.2rem;margin-bottom:6px}
+.card p{color:#8a8fa8;font-size:.83rem;margin-bottom:18px;line-height:1.5}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:.76rem;color:#8a8fa8;margin-bottom:4px}
+.field input{width:100%;background:#0d0f14;border:1px solid #2a2d35;border-radius:8px;color:#e8eaf0;padding:11px 12px;font-size:.88rem;outline:none;-webkit-appearance:none}
+.field input:focus{border-color:#f5c518}
+.divlabel{text-align:center;font-size:.72rem;color:#555;margin:12px 0 10px}
+#save-btn{width:100%;background:#f5c518;color:#0d0f14;border:none;border-radius:8px;padding:13px;font-size:.95rem;font-weight:700;cursor:pointer;margin-top:8px;-webkit-appearance:none}
+#setup-err{color:#e53e3e;font-size:.8rem;margin-top:10px;min-height:20px}
+
+/* ── header ── */
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #1e2130;flex-shrink:0}
+.logo{font-size:1rem;font-weight:700;color:#f5c518}
+.hdr-btns{display:flex;gap:8px}
+.hdr-btn{background:#1a1d2a;border:1px solid #2a2d35;color:#8a8fa8;border-radius:7px;padding:6px 11px;font-size:.77rem;cursor:pointer}
+
+/* ── messages ── */
+#msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
+.msg{max-width:84%;padding:11px 13px;border-radius:14px;font-size:.88rem;line-height:1.55;word-break:break-word}
+.msg.user{align-self:flex-end;background:#1e3a5f;border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:#1a1d2a;border:1px solid #2a2d35;border-bottom-left-radius:4px}
+.msg.bot.thinking{color:#8a8fa8;font-style:italic;font-size:.82rem}
+.msg img{max-width:100%;border-radius:8px;margin-top:6px;display:block}
+
+/* ── input bar ── */
+#bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px 16px;border-top:1px solid #1e2130;flex-shrink:0}
+#aw{position:relative;width:40px;height:40px;min-width:40px;border-radius:50%;background:#1a1d2a;border:1px solid #2a2d35;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden}
+#attach-icon{font-size:1.1rem;pointer-events:none;user-select:none}
+#file-input{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer}
+#preview-wrap{position:relative;flex-shrink:0}
+#preview{width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid #2a2d35;display:none}
+#rm-btn{position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:#e53e3e;border:none;color:#fff;font-size:.55rem;cursor:pointer;display:none;align-items:center;justify-content:center;padding:0}
+#ti{flex:1;background:#1a1d2a;border:1px solid #2a2d35;border-radius:12px;color:#e8eaf0;padding:10px 13px;font-size:.92rem;resize:none;outline:none;max-height:120px;overflow-y:auto;font-family:inherit;line-height:1.4;-webkit-appearance:none}
+#ti::placeholder{color:#454860}
+#sb{width:40px;height:40px;min-width:40px;border-radius:50%;background:#f5c518;border:none;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;-webkit-appearance:none}
+#sb:disabled{opacity:.4}
+</style>
+</head>
+<body>
+
+<!-- ── Setup ── -->
+<div id="setup">
+  <div class="card">
+    <h2>📊 Trading AI — Setup</h2>
+    <p>Enter your keys below. They are saved on this device only and never uploaded anywhere.</p>
+
+    <div class="field">
+      <label>ANTHROPIC API KEY *</label>
+      <input id="s-ant" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-api03-…">
+    </div>
+
+    <div class="divlabel">── Capital.com (optional — live market data) ──</div>
+
+    <div class="field">
+      <label>CAPITAL.COM API KEY</label>
+      <input id="s-cap" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="jB5JBd…">
+    </div>
+    <div class="field">
+      <label>CAPITAL.COM EMAIL</label>
+      <input id="s-email" type="email" autocomplete="off" placeholder="you@email.com">
+    </div>
+    <div class="field">
+      <label>CAPITAL.COM PASSWORD</label>
+      <input id="s-pass" type="password" autocomplete="off" placeholder="password">
+    </div>
+
+    <button id="save-btn" onclick="doSave()">Save &amp; Start</button>
+    <div id="setup-err"></div>
+    <div id="js-status" style="margin-top:12px;padding:10px;border-radius:8px;background:#1a2a1a;border:1px solid #2a4a2a;font-size:.78rem;color:#6a9a6a;display:none">
+      ✓ JavaScript is active — Save button is ready
+    </div>
+  </div>
+</div>
+
+<noscript>
+<div style="position:fixed;inset:0;background:#0d0f14;display:flex;align-items:center;justify-content:center;padding:20px;z-index:9999">
+  <div style="background:#1a1200;border:2px solid #f5c518;border-radius:16px;padding:28px;max-width:380px;text-align:center;font-family:sans-serif">
+    <div style="font-size:2rem;margin-bottom:12px">⚠️</div>
+    <div style="color:#f5c518;font-size:1.1rem;font-weight:700;margin-bottom:10px">JavaScript is not running</div>
+    <div style="color:#ccc;font-size:.88rem;line-height:1.6">
+      This file requires JavaScript. You are viewing it in a file previewer that does not run JavaScript.<br><br>
+      <strong style="color:#f5c518">To fix on iPhone:</strong><br>
+      Open <strong>Safari</strong> → tap the <strong>⬇ download icon</strong> → tap <strong>trading_ai.html</strong><br><br>
+      <strong style="color:#f5c518">To fix on Android:</strong><br>
+      Open in <strong>Chrome</strong> browser, not a file viewer app.
+    </div>
+  </div>
+</div>
+</noscript>
+
+<!-- ── App ── -->
+<div id="app">
+  <header>
+    <span class="logo">📊 Trading AI</span>
+    <div class="hdr-btns">
+      <button class="hdr-btn" onclick="openSetup()">⚙ Keys</button>
+      <button class="hdr-btn" onclick="clearChat()">🗑 Clear</button>
+    </div>
+  </header>
+
+  <div id="msgs"></div>
+
+  <div id="bar">
+    <div id="aw" title="Attach chart">
+      <span id="attach-icon">📎</span>
+      <input type="file" id="file-input" accept="image/*" onchange="onFileChange(this)">
+    </div>
+    <div id="preview-wrap">
+      <img id="preview" alt="">
+      <button id="rm-btn" onclick="clearPreview()">✕</button>
+    </div>
+    <textarea id="ti" rows="1" placeholder="Ask about any market…" onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
+    <button id="sb" onclick="send()">➤</button>
+  </div>
+</div>
+
+<script>
+/* ── Storage: localStorage with in-memory fallback ── */
+var _mem = {};
+function stor(k,v){
+  if(v===undefined){
+    try{ return localStorage.getItem(k)||''; }catch(e){ return _mem[k]||''; }
+  }
+  try{ localStorage.setItem(k,v); }catch(e){}
+  _mem[k]=v;
+}
+
+var K = {ant:'t_ant', cap:'t_cap', email:'t_email', pass:'t_pass'};
+
+/* ── State ── */
+var conversation = [];
+var pendingImg = null;
+var capCst = null, capSec = null, capBase = 'https://demo-api-capital.backend-capital.com/api/v1';
+var CAP_BASES = [
+  'https://demo-api-capital.backend-capital.com/api/v1',
+  'https://api-capital.backend-capital.com/api/v1'
+];
+
+/* ── System prompt ── */
+var SYSTEM = 'You are an elite professional trading analyst with deep expertise across all financial markets — forex, commodities (gold, silver, oil), indices (NAS100, S&P 500, FTSE, DAX), stocks, and crypto.\n\nWhen the user shares a chart image or asks about a market:\n1. Analyze market structure, trend, momentum, key support/resistance levels, and chart patterns\n2. Identify confluence zones and high-probability setups\n3. Give a clear directional bias: BUY / SELL / WAIT\n4. Provide specific entry, stop-loss, and take-profit levels with rationale\n5. State your confidence level and key invalidation conditions\n\nYou have access to a live market data tool — use it proactively whenever the user asks about current prices, live trends, or market conditions for any instrument.\n\nAlways be direct, specific, and actionable. Give real analysis.';
+
+/* ── Tool ── */
+var TOOLS = [{
+  name: 'get_live_market_data',
+  description: 'Fetch LIVE real-time market data from Capital.com for any instrument — forex, gold, oil, indices, stocks, crypto. Call this whenever the user asks about current prices, trends, or live market conditions.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      search_term: {type:'string', description:'Instrument name e.g. "GOLD", "NAS100", "EURUSD", "BTC"'},
+      resolution: {type:'string', enum:['MINUTE','MINUTE_5','MINUTE_15','MINUTE_30','HOUR','HOUR_4','DAY','WEEK'], description:'Candle resolution (default HOUR)'}
+    },
+    required: ['search_term']
+  }
+}];
+
+/* ── DOM helpers ── */
+function $(id){ return document.getElementById(id); }
+
+function showErr(msg){
+  $('setup-err').textContent = msg;
+  $('setup-err').style.color = '#e53e3e';
+}
+
+function autoResize(el){
+  el.style.height='auto';
+  el.style.height = Math.min(el.scrollHeight, 120)+'px';
+}
+
+function onKey(e){
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+}
+
+/* ── Setup ── */
+function doSave(){
+  var ant = $('s-ant').value.replace(/\s/g,'');
+  if(!ant){
+    showErr('Anthropic API key is required.');
+    return;
+  }
+  stor(K.ant, ant);
+  stor(K.cap,   $('s-cap').value.replace(/\s/g,''));
+  stor(K.email, $('s-email').value.trim());
+  stor(K.pass,  $('s-pass').value);
+  capCst = null; capSec = null;
+  $('setup').style.display = 'none';
+  $('app').style.display = 'flex';
+}
+
+function openSetup(){
+  $('s-ant').value   = stor(K.ant);
+  $('s-cap').value   = stor(K.cap);
+  $('s-email').value = stor(K.email);
+  $('s-pass').value  = stor(K.pass);
+  $('app').style.display   = 'none';
+  $('setup').style.display = 'flex';
+  $('save-btn').textContent = 'Update & Return';
+}
+
+/* ── Clear ── */
+function clearChat(){
+  conversation = [];
+  $('msgs').innerHTML = '';
+  clearPreview();
+  capCst = null; capSec = null;
+}
+
+/* ── Image ── */
+function onFileChange(input){
+  var f = input.files[0];
+  if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var data = e.target.result;
+    var comma = data.indexOf(',');
+    pendingImg = {base64: data.slice(comma+1), mediaType: f.type||'image/jpeg'};
+    $('preview').src = data;
+    $('preview').style.display = 'block';
+    $('rm-btn').style.display = 'flex';
+  };
+  reader.readAsDataURL(f);
+}
+
+function clearPreview(){
+  pendingImg = null;
+  $('preview').style.display = 'none';
+  $('rm-btn').style.display = 'none';
+  $('file-input').value = '';
+}
+
+/* ── Messages ── */
+function addMsg(role, text, isHTML){
+  var d = document.createElement('div');
+  d.className = 'msg '+role;
+  if(isHTML) d.innerHTML = text;
+  else d.innerHTML = md(text);
+  $('msgs').appendChild(d);
+  d.scrollIntoView({behavior:'smooth',block:'end'});
+  return d;
+}
+
+function md(t){
+  return t
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`(.+?)`/g,'<code style="background:#0d0f14;padding:1px 5px;border-radius:3px">$1</code>')
+    .replace(/^#{1,3}\s+(.+)$/gm,'<strong style="color:#f5c518">$1</strong>')
+    .replace(/\n/g,'<br>');
+}
+
+function setThinking(on){
+  if(on){
+    var d = addMsg('bot','⏳ Thinking…',true);
+    d.classList.add('thinking');
+    d.id = '_think';
+  } else {
+    var t = $('_think');
+    if(t) t.remove();
+  }
+  $('sb').disabled = on;
+}
+
+/* ── Capital.com ── */
+async function capLogin(base){
+  var apiKey=stor(K.cap), email=stor(K.email), pass=stor(K.pass);
+  if(!apiKey||!email||!pass) return false;
+  try{
+    var r = await fetch(base+'/session',{
+      method:'POST',
+      headers:{'X-CAP-API-KEY':apiKey,'Content-Type':'application/json'},
+      body:JSON.stringify({identifier:email,password:pass,encryptedPassword:false})
+    });
+    if(!r.ok) return false;
+    capCst = r.headers.get('CST');
+    capSec = r.headers.get('X-SECURITY-TOKEN');
+    return !!(capCst&&capSec);
+  }catch(e){ return false; }
+}
+
+async function capAuth(){
+  if(capCst&&capSec) return true;
+  for(var i=0;i<CAP_BASES.length;i++){
+    if(await capLogin(CAP_BASES[i])){ capBase=CAP_BASES[i]; return true; }
+  }
+  return false;
+}
+
+async function capGet(path, retry){
+  var key=stor(K.cap);
+  if(!key) return null;
+  try{
+    var r = await fetch(capBase+path,{
+      headers:{'X-CAP-API-KEY':key,'CST':capCst||'','X-SECURITY-TOKEN':capSec||''}
+    });
+    if(r.status===401&&retry!==false){ capCst=null;capSec=null; if(await capAuth()) return capGet(path,false); return null; }
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){ return null; }
+}
+
+function mid(p){
+  if(!p) return null;
+  if(typeof p==='number') return p;
+  var b=p.bid,a=p.ask;
+  if(b!=null&&a!=null) return (b+a)/2;
+  return b||a||null;
+}
+
+async function getLiveData(term, res){
+  res = res||'HOUR';
+  if(!stor(K.cap)||!stor(K.email)||!stor(K.pass))
+    return {error:'Capital.com credentials not set. Tap ⚙ Keys to add them.'};
+  if(!capCst||!capSec){ if(!await capAuth()) return {error:'Capital.com login failed. Check your credentials in ⚙ Keys.'}; }
+  var mkt = await capGet('/markets?searchTerm='+encodeURIComponent(term)+'&limit=3');
+  if(!mkt||!mkt.markets||!mkt.markets.length) return {error:'Instrument not found: '+term};
+  var epic=mkt.markets[0].epic, name=mkt.markets[0].instrumentName;
+  var pd = await capGet('/prices/'+epic+'?resolution='+res+'&max=50');
+  if(!pd||!pd.prices) return {error:'No price data for '+name};
+  var prices=pd.prices, last=prices[prices.length-1], first=prices[0];
+  var cur=mid(last.closePrice), open=mid(first.openPrice);
+  var pct = (cur&&open) ? (((cur-open)/open)*100).toFixed(2)+'%' : 'n/a';
+  return {
+    instrument:name, epic:epic, resolution:res,
+    current_price:cur, change:pct,
+    recent_candles: prices.slice(-10).map(function(c){
+      return {t:c.snapshotTime,o:mid(c.openPrice),h:mid(c.highPrice),l:mid(c.lowPrice),c:mid(c.closePrice)};
+    })
+  };
+}
+
+/* ── History slice ── */
+function history(){
+  var h = conversation.slice(-20);
+  while(h.length){
+    var f=h[0], c=f.content;
+    var orphan = Array.isArray(c) && c.some(function(p){ return p&&p.type==='tool_result'; });
+    if(f.role!=='user'||orphan) h=h.slice(1); else break;
+  }
+  return h;
+}
+
+/* ── Main send ── */
+async function send(){
+  var text = $('ti').value.trim();
+  if(!text&&!pendingImg) return;
+
+  var antKey = stor(K.ant);
+  if(!antKey){ addMsg('bot','⚠ Anthropic API key not set. Tap ⚙ Keys.'); return; }
+
+  /* build content */
+  var content;
+  if(pendingImg){
+    /* replace older images in history to save tokens */
+    conversation.forEach(function(m){
+      if(!Array.isArray(m.content)) return;
+      m.content.forEach(function(b,i){
+        if(b&&b.type==='image') m.content[i]={type:'text',text:'[earlier chart]'};
+      });
+    });
+    content = [{type:'image',source:{type:'base64',media_type:pendingImg.mediaType,data:pendingImg.base64}}];
+    if(text) content.push({type:'text',text:text});
+  } else {
+    content = text;
+  }
+
+  /* show user bubble */
+  var bubble = addMsg('user','',true);
+  if(pendingImg){
+    var img=document.createElement('img');
+    img.src='data:'+pendingImg.mediaType+';base64,'+pendingImg.base64;
+    bubble.appendChild(img);
+    if(text){ var p=document.createElement('p');p.style.marginTop='6px';p.textContent=text;bubble.appendChild(p); }
+  } else {
+    bubble.innerHTML = md(text);
+  }
+
+  $('ti').value=''; $('ti').style.height='';
+  clearPreview();
+
+  conversation.push({role:'user', content:content});
+  setThinking(true);
+
+  /* agentic loop */
+  for(var i=0;i<5;i++){
+    var body;
+    try{
+      var resp = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{
+          'x-api-key':antKey,
+          'anthropic-version':'2023-06-01',
+          'content-type':'application/json',
+          'anthropic-dangerous-allow-browser':'true'
+        },
+        body:JSON.stringify({
+          model:'claude-sonnet-4-6',
+          max_tokens:2048,
+          system:SYSTEM,
+          tools:TOOLS,
+          messages:history()
+        })
+      });
+      body = await resp.json();
+      if(!resp.ok) throw new Error(body.error&&body.error.message ? body.error.message : resp.status+' '+resp.statusText);
+    }catch(err){
+      setThinking(false);
+      addMsg('bot','⚠ '+err.message);
+      conversation.pop();
+      return;
+    }
+
+    var ac = (body.content||[]).map(function(b){
+      if(b.type==='text') return {type:'text',text:b.text};
+      if(b.type==='tool_use') return {type:'tool_use',id:b.id,name:b.name,input:b.input};
+      return b;
+    });
+    conversation.push({role:'assistant',content:ac});
+
+    if(body.stop_reason==='tool_use'){
+      var results=[];
+      for(var j=0;j<ac.length;j++){
+        if(ac[j].type!=='tool_use') continue;
+        var inp=ac[j].input||{};
+        var r = await getLiveData(inp.search_term||'', inp.resolution||'HOUR');
+        results.push({type:'tool_result',tool_use_id:ac[j].id,content:JSON.stringify(r)});
+      }
+      conversation.push({role:'user',content:results});
+      continue;
+    }
+
+    /* done */
+    setThinking(false);
+    var reply = ac.filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n').trim();
+    if(reply) addMsg('bot',reply);
+    return;
+  }
+
+  setThinking(false);
+  addMsg('bot','⚠ Maximum iterations reached.');
+}
+
+/* ── Init ── */
+(function(){
+  /* show JS-active indicator so user knows JS is working */
+  var jsOk = $('js-status');
+  if(jsOk) jsOk.style.display='block';
+
+  if(stor(K.ant)){
+    $('setup').style.display='none';
+    $('app').style.display='flex';
+  }
+  $('s-ant').value   = stor(K.ant);
+  $('s-cap').value   = stor(K.cap);
+  $('s-email').value = stor(K.email);
+  $('s-pass').value  = stor(K.pass);
+})();
+</script>
+</body>
+</html>
