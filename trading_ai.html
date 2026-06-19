@@ -392,6 +392,8 @@ async function send(){
   $('ti').value=''; $('ti').style.height='';
   clearPreview();
 
+  /* snapshot conversation length BEFORE pushing — used to roll back on any error */
+  var snapLen = conversation.length;
   conversation.push({role:'user', content:content});
   setThinking(true);
 
@@ -417,12 +419,15 @@ async function send(){
           messages:history()
         })
       });
-      body = await resp.json();
+      var raw = await resp.text();
+      try{ body = JSON.parse(raw); }
+      catch(e){ throw new Error('Server error (non-JSON response). Try again.'); }
       if(!resp.ok) throw new Error(body.error&&body.error.message ? body.error.message : resp.status+' '+resp.statusText);
     }catch(err){
+      /* roll back ALL conversation changes from this turn, not just the last push */
+      conversation.length = snapLen;
       setThinking(false);
-      addMsg('bot','⚠ '+err.name+': '+err.message);
-      conversation.pop();
+      addMsg('bot','⚠ '+err.message);
       return;
     }
 
