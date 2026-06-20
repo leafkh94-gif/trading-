@@ -2,5 +2,10 @@
   "buildCommand": "",
   "outputDirectory": ".",
   "framework": null,
-  "installCommand": ""
+  "installCommand": "",
+  "functions": {
+    "api/chat.js": {
+      "maxDuration": 60
+    }
+  }
 }
