@@ -1,3 +1,5 @@
+const https = require('https');
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -5,25 +7,41 @@ module.exports = async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  try {
-    const apiKey = req.headers['x-api-key'];
-    if (!apiKey) return res.status(400).json({ error: { message: 'Missing x-api-key header' } });
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey) return res.status(400).json({ error: { message: 'Missing API key' } });
 
-    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+  const body = JSON.stringify(req.body);
+
+  return new Promise((resolve) => {
+    const options = {
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
       method: 'POST',
       headers: {
         'content-type': 'application/json',
+        'content-length': Buffer.byteLength(body),
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-allow-browser': 'true',
       },
-      body: JSON.stringify(req.body),
+    };
+
+    const proxy = https.request(options, (upstream) => {
+      let data = '';
+      upstream.on('data', (chunk) => { data += chunk; });
+      upstream.on('end', () => {
+        res.setHeader('content-type', 'application/json');
+        res.status(upstream.statusCode).send(data);
+        resolve();
+      });
     });
 
-    const data = await upstream.text();
-    res.setHeader('content-type', 'application/json');
-    return res.status(upstream.status).send(data);
-  } catch (e) {
-    return res.status(500).json({ error: { message: e.message } });
-  }
+    proxy.on('error', (e) => {
+      res.status(500).json({ error: { message: e.message } });
+      resolve();
+    });
+
+    proxy.write(body);
+    proxy.end();
+  });
 };
